@@ -6,7 +6,7 @@
 
 | 顺序 | 文档 | 行数 | 作用 | 何时读 |
 |---|---|---|---|---|
-| 1️⃣ | **`docs/v2/PROGRESS.md`**（本文件） | ~920 | 蓝图总览 + 进度总览 + 各 Step 详情 + 协作约定 + §11 Step 11 全记录（含 §11.4 baseline 尝试 / **§11.4.1 正式 baseline-v0.1 封存记录** / §11.5 架构短板 A1~A8 / §11.6 A2 设计 / **§11.8 S8 Compare 实施记录**） | **每次新会话首先读** |
+| 1️⃣ | **`docs/v2/PROGRESS.md`**（本文件） | ~920 | 蓝图总览 + 进度总览 + 各 Step 详情 + 协作约定 + §11 Step 11 全记录（含 §11.4 baseline 尝试 / **§11.4.1 正式 baseline-v0.1 封存记录** / §11.5 架构短板 A1~A8 / §11.6 A2 实施（MVP-A） / **§11.8 S8 Compare 实施记录** / **§12 Step 12 交付闭环**） | **每次新会话首先读** |
 | 2️⃣ | `docs/v2/step1-data-model.md` | ~893 | Step 1 数据模型详细设计（Schema/DDL/实体关系/迁移铁律） | 要改 Schema/数据模型时读 |
 | 3️⃣ | `docs/v2/step3-testpoint-generator.md` | ~283 | Step 3 测试点生成引擎设计（两阶段 LLM 派生 + fingerprint） | 要改测试点生成时读 |
 | 4️⃣ | `docs/v2/step4-strategy-engine.md` | ~321 | Step 4 策略引擎设计（三策略代码派生 + 覆盖率双指标） | 要改策略引擎时读 |
@@ -36,7 +36,8 @@ V2 的核心不是 `Prompt→LLM→Result`，而是 **"结构化数据 → 规�
 - **架构观测性补齐** ✅（`9f7888c`）：A1 LLM 用量对账 + A3 S5 批次失败证据 + A7 runset 自证信号 + A8 解析问题归类（零真实 LLM，不改业务逻辑与评测判定）。
 - ★**正式 baseline-v0.1 已成立（2026-09-23，attempt #3）**：模型按 D5 第三次修订钉为 `deepseek-v4.1-flash`（provider 仍为阿里云百炼，同端点同密钥），runset **`bm-bench-v0-1-20260923T055019Z`** = **10/10 completed / llm_failure 0 / evaluation_failure 0 / input_invalid 0 / EXIT_CODE=0 / retries 0 / failures 0**，`git_commit=731e013`、`git_dirty=false`、`case_set_digest=d9b5bb552b1833d9debd0e1d75fa6f31`，全轮 1254 次真实 LLM 调用 / 5862 s，**未与 attempt #2 的任何 case 拼接**。完整封存记录见 §11.4.1。attempt #1/#2 仍只作架构验证证据、不作 baseline。
 - **S8 Compare / Delta** ✅（2026-09-23 实施，见 §11.8 + 设计文档附录 D）：`core/v2/eval/compare.py` + 独立 CLI `scripts/v2_benchmark_compare.py` + **机器可读正式基线 `benchmark/baselines/baseline-v0.1.json`**（补齐 B.2#7「baseline 显式提升入库」欠账）+ 59 例离线测试。零真实 LLM、零 DB 写入、无阈值无门禁（regression 不影响退出码，码表刻意不含 1）；跨模型/跨数据集一律 `not_comparable` 而非静默混算；identity 全格 `diagnostic_only=true`。全量 **1378 passed + 3 skipped**（= 基线 1319 + S8 新增 59），ruff 双绿，schema_version=10，三个 DB 哈希未变，Gold/bench-v0.1/Runtime/S6 CLI/评测口径 **0 行改动**。
-- 全量测试基线 = **1378 passed + 3 skipped**。S8 已提交推送（`b09a388`，origin=gitee=local 三方同步）⇒ **Step 11 全链（S1~S8 + baseline）收口**。下一步待用户裁决：Step 12/13 路线评审，或处理开放项：A2 断点续跑、A4/A5/A6 短板、A8 根因、token 用量插桩（挂账⑩）。
+- Step 11 收口时全量测试基线 = **1378 passed + 3 skipped**。S8 已提交推送（`b09a388`，origin=gitee=local 三方同步）⇒ **Step 11 全链（S1~S8 + baseline）收口**。
+- **2026-10-26 状态更新**：A2 断点续跑已实施（`e3c7e53`，`--resume` + 来源一致性硬门禁 + `test_benchmark_runner.py` 82 例通过）；部署/公共实例/路由调整已推送（`7b4e0e0`~`1c20c24`，登录后 `/` 默认进 V2，V1 移至 `/v1`）。当前全量基线 **1419 passed + 13 skipped**（10 个 benchmark smoke 库缺失跳过 + 3 个 real_llm 跳过）。**Step 12 = V2 交付闭环已启动**：12.0 文档对齐 / 12.1 Excel-Markdown 导出已完成，12.2 材料引用与 12.3 文件输入待做（详见 §12）。
 
 **★ Step 9 后真实项目状态审计结论（Step 10 的由来）**：V2 后端代码完整但**完全未产品化**——`data/data_v2.db` 是空库（Tables: []，从未运行 create_v2_schema）、`web/` 目录 0 处引用 `core.v2`（前端纯 V1）、无 CLI 入口、无顶层 Runtime 串联 Step 2→8、V2 LLM 从未真实调用（875 tests 全 mock/临时 DB）。因此 Step 10 不新增 AI 功能，专注把已有能力变成用户可真实运行的产品链路。
 
@@ -124,9 +125,10 @@ LLM 的输入/输出两端都必须是已定义 Schema 的结构化数据；LLM 
 | — V2 Product Polish | ✅ 完成+已推送 | P0 视觉设计系统升级 + P1~P5 交互打磨 | 已推 origin+gitee (`d1c5345`) |
 | 11 Quality Eval + Benchmark（S1~S8） | ✅ **S1~S7 ✅ + D14 ✅ + F1·F2 ✅ + 架构观测性（A1·A3·A7·A8）✅ + ★baseline-v0.1 ✅ 正式成立（10/10 completed）+ S8 Compare/Delta ✅（无门禁；待用户验收提交）** | S1 `docs/v2/step11-benchmark-evaluation.md`（冻结 v1.0）；S2 `core/v2/eval/schema.py`（Case/Gold/Manifest+loader）；S3 `core/v2/eval/`{matching,metrics_hard}.py（四态匹配+硬指标+RunObservation 契约，零 LLM）；S4 `benchmark/`（bench-v0.1：10 case+10 requirement+11 gold+manifest）+ 4 测试文件 147 例；S5 `core/v2/eval/`{metrics_soft,semantic_prompts}.py（语义三态+forbidden suspect+candidate 预审+JSON 契约）+ 34 例；S6 `core/v2/eval/runner_lib.py`+`scripts/v2_benchmark.py`（独立 CLI 进程+独立 benchmark DB+五态阶段门控分类+环境指纹+runset 快照+生产库硬护栏）+ 58 例；S7 `core/v2/eval/`{rails,textops}.py（三轨关联 identity 诊断>bridge>anchor + D10 不猜 item_id）+ `metrics_hard.py`/`runner_lib.py` 接入 + bc_01 Gold `gold-v0.2` + D7② `core/config.py` 空配置守卫 + D6 `config.yaml` 模型同步 + 48 例 + 设计文档附录 C；★**baseline-v0.1** runset `bm-bench-v0-1-20260923T055019Z`（模型 `deepseek-v4.1-flash`，10/10 completed，1254 次真实调用，完整封存见 §11.4.1）；S8 `core/v2/eval/compare.py`+`scripts/v2_benchmark_compare.py`+`benchmark/baselines/baseline-v0.1.json`（只读比较层：可比性判据 + None-safe delta + 无门禁报告，见 §11.8）；详见 §11 | S1~S4 已推 (`0cb4bf5`)；S5 已推 (`7b59bfe`)；S6 已推 (`f72db13`)；S7 已推 (`2eda2e2`)；baseline 封存已推 (`12728ea`)；S8 已推 (`b09a388`)，origin=gitee=local 三方同步 |
 | ├ S7 后续修正（D14 / F1·F2 / 架构观测性） | ✅ 完成+已推送（origin=gitee=local=`9f7888c`） | **D14** `rails.py` 多 Gold N≠M 不猜归因（守卫触发 0 次、bc_01 数字零变化）；**F1** `parser.extract_json` 多围栏容错 + **F2** `ir.py` 解析问题 warning；**观测性** A1 `LLMClient` 用量计数 + Runtime 阶段增量对账（`PipelineStepResult.llm_attempts/retries/failures`）、A3 `metrics_soft.BatchMeta.failure_kind/evidence`（禁落原文，只 sha256_12+长度+形状+计数）、A7 `runner_lib` `signals.evidence_counts`/`rules_without_evidence`、A8 `parser.classify_parse_issue()` 封闭归类（schema 严格性未放宽）+ `tests/test_llm_usage_stats.py`(20) + runtime/S5 离线用例(+3+7)；详见 §11.5 | D14 `1d55415`；F1+F2 `74cf9db`；观测性 `9f7888c`（均已推双远程） |
-| 12~13 | ⬜ 未开始（**前置已满足**：Step 11 S1~S8 + baseline-v0.1 全部完成 ⇒ 可到评审时点） | 评审输入：§11.4.1 baseline 封存 + §11.8 S8 + §11.5 短板 A1~A8 | — |
+| 12 V2 交付闭环 | 🟡 进行中（12.0 文档对齐 ✅ / 12.1 导出 ✅ / 12.2 材料引用 ⬜ / 12.3 文件输入 ⬜） | `core/v2/export.py` + `GET /api/v2/runs/<id>/export`（15 个 V2 端点）+ 前端用例页/报告页导出入口；详见 §12 | 待提交 |
+| 13 Preference Learning | ⬜ 未开始（前置：真实人工编辑数据积累 + 路线评审） | 数据源 = Step 9 `changed_fields`；V1 已有偏好提取，V2 未接线 | — |
 
-**测试基线**：V1 原有 126 例（零回归）+ V2 新增，**当前全量 1378 passed + 3 skipped**（Step 11 S2~S7 新增 292 例 Benchmark/Eval 测试，其中 S5 语义层 34、S6 Runner 58、S7 三轨 48；S7 后续再新增 D14+F1·F2 共 13 例（`test_benchmark_rails` D14 归因 + `test_ir_parser`/`test_ir_build` 围栏与解析日志）+ 观测性 30 例（`test_llm_usage_stats` 20 / `test_v2_runtime` 阶段用量 3 / `test_benchmark_metrics_soft` 批次失败证据 7）；**S8 再新增 59 例 `test_benchmark_compare`（可比性/delta 语义/方向口径/脱敏投影/聚合分母/报告往返/runset 完整性/CLI 码表/零 LLM 零 DB）**；另 S7 的 D7② 在 `tests/test_regression.py` 新增 5 例 V1 配置守卫；启用 V2_RUN_REAL_LLM=1 后 +3），schema_version=10，ruff check/format 全绿。
+**测试基线**：V1 原有 126 例（零回归）+ V2 新增。**2026-10-26 实测：1419 passed + 13 skipped**（新增 Step 12.1 导出 9 例；13 skip = 10 个 benchmark smoke 库缺失 + 3 个 real_llm）。以下为 Step 11 收口时的历史计数：**1378 passed + 3 skipped**（Step 11 S2~S7 新增 292 例 Benchmark/Eval 测试，其中 S5 语义层 34、S6 Runner 58、S7 三轨 48；S7 后续再新增 D14+F1·F2 共 13 例（`test_benchmark_rails` D14 归因 + `test_ir_parser`/`test_ir_build` 围栏与解析日志）+ 观测性 30 例（`test_llm_usage_stats` 20 / `test_v2_runtime` 阶段用量 3 / `test_benchmark_metrics_soft` 批次失败证据 7）；**S8 再新增 59 例 `test_benchmark_compare`（可比性/delta 语义/方向口径/脱敏投影/聚合分母/报告往返/runset 完整性/CLI 码表/零 LLM 零 DB）**；另 S7 的 D7② 在 `tests/test_regression.py` 新增 5 例 V1 配置守卫；启用 V2_RUN_REAL_LLM=1 后 +3），schema_version=10，ruff check/format 全绿。
 
 ---
 
@@ -557,6 +559,7 @@ core/v2/         # V2 持久层 + 领域服务（独立 data_v2.db，schema_vers
   review_prompts.py review_hard.py review_soft.py review_orchestrator.py  # Step 7 AI Reviewer（硬/软混合）
   optimizer.py optimizer_orchestrator.py                                 # Step 8 Dedup Optimizer（去重归档 + 有条件重评审）
   human_editor.py human_editor_orchestrator.py                           # Step 9 Human Editor（人工编辑 + Revision 快照 + 乐观锁 + Validator）
+  export.py      # Step 12.1 V2 用例导出（Excel 两 sheet / Markdown；默认排除 ARCHIVED）
   bootstrap.py   # Step 10.1 V2 DB 真初始化（ensure_v2_ready，web 启动路径调用）
   runtime.py client_factory.py                                           # Step 10.2 顶层 Runtime（run_v2_pipeline）+ LLMClient 构建工厂；A1 阶段级 LLM 用量增量对账（llm_attempts/retries/failures）+ IR 解析问题计数
   eval/        # Step 11 Benchmark 评价层（Runtime 外部只读观测，零 DB 写入）
@@ -568,7 +571,7 @@ core/v2/         # V2 持久层 + 领域服务（独立 data_v2.db，schema_vers
     textops.py #    S7（裁决 D8）：`anchor_satisfied` / `statement_similarity` 两个通用文本 helper（非 NLP 层，配防漂移测试）
     rails.py   #    S7（裁决 D1/D2/D3/D9/D10）：三轨关联唯一入口 identity(诊断)>bridge>anchor + RailMatch.via + IdentityDiagnostics + D10 不猜 item_id；D14：多 Gold 场景 N≠M 归入 unattributable
     compare.py #    S8：Compare/Delta 只读比较层（脱敏投影 digest + 聚合 + 可比性 15 判据 + None-safe 无阈值 diff + 报告契约）；零 LLM、零 DB、不改任何判定口径
-web/             # Web 层：__init__.py（V1 蓝图 + /v2 页面路由 Step 10.4）+ v2_service.py（HTTP↔core/v2 适配 Step 10.3）+ v2_routes.py（14 个 /api/v2/* 端点，含 UI 重构新增只读 requirements）
+web/             # Web 层：__init__.py（V1 蓝图 + /v2 页面路由 Step 10.4）+ v2_service.py（HTTP↔core/v2 适配 Step 10.3）+ v2_routes.py（15 个 /api/v2/* 端点，含只读 requirements 与 Step 12.1 导出）
 scripts/         # CLI：v2_real_run.py（Step 10.5 真实 LLM 全链路，权威验证路径）+ v2_step10_verify.py（Step 10.6 一键验收 + 22 条门槛报告表）+ v2_benchmark.py（Step 11 S6 Benchmark Runner，独立进程 + 独立 benchmark DB + runset 快照）+ v2_benchmark_compare.py（Step 11 S8 只读比较器：baseline↔runset delta + baseline 提升，零 LLM/零 DB/无门禁）
 benchmark/       # Step 11 S4 bench-v0.1 数据集（cases/ 10 正式+demo 的 json+requirement.md；gold/ 11；manifests/ bm-bench-v0-1 十 case + bm-demo[bench-v0.0-demo 隔离]）；baselines/（S8 机器可读正式基线 baseline-v0.1.json，入库）；runsets/（S6 输出，已 gitignore 不入库）；compares/（S8 报告，派生产物，已 gitignore）
 templates/v2.html（React SPA 壳）+ frontend-v2/（V2 前端源码 React+TS+Vite）+ static/v2/（构建产物 v2_react.js/v2_react.css，入库）  # UI 重构后形态；V1 三件套零改动
@@ -584,6 +587,7 @@ tests/           # test_schemas/state_machine/v2_repository/v2_roundtrip/resolve
                  # optimizer/optimizer_orchestrator/step8_acceptance
                  # human_editor/human_editor_orchestrator/step9_acceptance
                  # test_v2_bootstrap/test_v2_runtime/test_v2_web_api（Step 10.1~10.4）
+                 # test_v2_export（Step 12.1：Excel/Markdown 内容、归档过滤、越权、格式/空运行）
                  # test_v2_real_run_script（Step 10.5 CLI smoke）
                  # test_step10_acceptance（Step 10.6：17 门槛 mock）/test_step10_real_llm（门槛 7-9 real_llm marker）
                  # test_benchmark_schema（S2 契约 90）/test_benchmark_eval_s3（S3 引擎 30）
@@ -599,7 +603,7 @@ tests/           # test_schemas/state_machine/v2_repository/v2_roundtrip/resolve
 
 ```powershell
 # venv 已就绪（若无：python -m venv .venv; .\.venv\Scripts\pip install -e ".[dev]"）
-.\.venv\Scripts\python.exe -m pytest -q                    # 期望 1378 passed + 3 skipped（real_llm marker 默认 skip；启用 V2_RUN_REAL_LLM=1 后 1381）
+.\.venv\Scripts\python.exe -m pytest -q                    # 期望 1419 passed + 13 skipped（10 smoke 库缺失 + 3 real_llm；V2_RUN_REAL_LLM=1 需本地真实产物）
 .\.venv\Scripts\python.exe -m ruff check .                 # 期望 All checks passed
 .\.venv\Scripts\python.exe -m ruff format --check .        # 期望全部 formatted
 .\.venv\Scripts\python.exe scripts/v2_benchmark_compare.py --baseline benchmark/baselines/baseline-v0.1.json --candidate benchmark/runsets/<runset_id>   # S8 比较（只读、无门禁）
@@ -784,12 +788,12 @@ python scripts/v2_step10_verify.py --with-real-llm # 期望 22 PASS / 0 FAIL / 0
 | S5 | 语义评价层（Semantic Accuracy 三态 correct/partial/incorrect + pending 治理 / forbidden LLM 仅产 suspect 不写 S3 invalid / additional_valid 仅产 suggested / 双轨物理隔离透传 / 确定性分批 20+6000 独占+24000 拆分 / JSON `benchmark-soft-v1` 序列化；独立评价 Prompt 非第二套 Reviewer，零 DB 依赖） | `core/v2/eval/`{metrics_soft,semantic_prompts}.py + `tests/test_benchmark_metrics_soft.py`(34 测试) | ✅ 验收通过 |
 | S6 | Benchmark Runner：`core/v2/eval/runner_lib.py`（纯函数层：Artifacts 装配含 ARCHIVED 排除 / 五态**阶段门控**分类 / Hard 序列化 / 环境指纹 / 原子写+敏感自检 / 生产库护栏）+ `scripts/v2_benchmark.py`（**独立 CLI 进程**：进程入口 `set_v2_db_path` → benchmark DB 默认 fresh → 输入预检 → `run_v2_pipeline(client=None, text=...)` → S3 常跑、非 COMPLETED 不跑 S5 LLM → `benchmark/runsets/<id>/`（runset.json + cases/*.json + manifest.resolved.json + `_COMPLETE.json`）；退出码 0/1/2/3/4/5；不新增 `--skip-soft/--compare/--stop-after` 等越权参数） | `core/v2/eval/runner_lib.py`(839) + `scripts/v2_benchmark.py`(662) + `tests/test_benchmark_runner.py`(58) + `.gitignore`(`benchmark/runsets/`) + 设计文档附录 B | ✅ 验收通过 |
 | S7 | **三轨关联改造（架构裁决 D1~D10/D13 + D7②/D6）** + bc_01 双模型 smoke 复测：新增 `core/v2/eval/rails.py`（三轨关联唯一入口：Identity 仅诊断 / obligation bridge / scenario anchor，`identity>bridge>anchor` 去重，D10 `item_id` 不猜）+ `core/v2/eval/textops.py`（D8 两个通用 helper + 防漂移测试）；`metrics_hard.py` 接入（`HardMetricsReport` 新增 `identity_match_rate`/`via_counts`/`identity_diagnostics`/`anchor_scope`，`AUTO_HIT` 正式重定义为"确定性关联命中"）；`runner_lib.py` payload 扩展（8 cell + match 带 `via`，**S6 形态旧 runset 仍可加载**）；bc_01 Gold anchor 修订 → `gold-v0.2`（三条非原文锚点改为需求原文逐字）；D7② `core/config.py` 空配置守卫（独立可回滚 V1 小改动 + 5 例回归）；D6 `config.yaml` fallback 模型同步 `qwen3.8-flash`。`metrics_soft.py`/`matching.py` identity 语义/Runtime/Parser/Prompt/DDL/API/前端 **零改动**。**注：正式 baseline-v0.1（10 case 全量 runset）已于 2026-09-23 attempt #3 成立**，见 §11.4.1 | `core/v2/eval/`{rails,textops}.py + `metrics_hard.py`/`runner_lib.py` 改动 + `benchmark/gold/bc_01_login.gold.json`(v0.2) + `tests/test_benchmark_rails.py`(48) + `core/config.py` + `tests/test_regression.py`(+5) + 设计文档附录 C | ✅ 改造完成（G1~G4 全过）+ 已推送 `2eda2e2`；★baseline-v0.1 已成立（§11.4.1） |
-| S7-后续 | **D14 归因守卫**（`1d55415`）：多 Gold 场景 N≠M 时并入 unattributable、`item_id=None`+pending、不猜 S5 轨迹；**F1 IR 多围栏解析修复 + F2 解析失败日志**（`74cf9db`）：`extract_json` 逐围栏尝试 + `ir.py` warning；**架构观测性补齐**（`9f7888c`）：A1 阶段级 LLM 用量对账 / A3 S5 批次失败证据 / A7 runset 自证信号 / A8 解析问题归类（零真实 LLM、Gold 未动、评测判定未动） | `core/v2/eval/rails.py` + `core/v2/parser.py` + `core/v2/ir.py` + `core/llm_client.py` + `core/v2/runtime.py` + `core/v2/eval/`{metrics_hard,metrics_soft,runner_lib}.py + `tests/`{test_benchmark_rails,test_ir_parser,test_ir_build,test_llm_usage_stats,test_v2_runtime,test_benchmark_metrics_soft}.py | ✅ 三项全部验收通过并推送（详见 §11.5）；⬜ A2 断点续跑仅完成设计未实施 |
+| S7-后续 | **D14 归因守卫**（`1d55415`）：多 Gold 场景 N≠M 时并入 unattributable、`item_id=None`+pending、不猜 S5 轨迹；**F1 IR 多围栏解析修复 + F2 解析失败日志**（`74cf9db`）：`extract_json` 逐围栏尝试 + `ir.py` warning；**架构观测性补齐**（`9f7888c`）：A1 阶段级 LLM 用量对账 / A3 S5 批次失败证据 / A7 runset 自证信号 / A8 解析问题归类（零真实 LLM、Gold 未动、评测判定未动） | `core/v2/eval/rails.py` + `core/v2/parser.py` + `core/v2/ir.py` + `core/llm_client.py` + `core/v2/runtime.py` + `core/v2/eval/`{metrics_hard,metrics_soft,runner_lib}.py + `tests/`{test_benchmark_rails,test_ir_parser,test_ir_build,test_llm_usage_stats,test_v2_runtime,test_benchmark_metrics_soft}.py | ✅ 三项全部验收通过并推送（详见 §11.5）；A2 断点续跑后于 `e3c7e53` 实施 MVP-A（见 §11.6） |
 | S8 | **Compare / Delta（无门禁）**：`core/v2/eval/compare.py`（`digest_case_payload` baseline/candidate 共用投影 + `aggregate_of` 均值分母口径 + `load_runset`/`load_baseline`/`resolve_operand` + `check_comparability` 15 项判据 + `diff_cell` None-safe 无阈值 + `compare_runsets` + `report_from_payload`）+ `scripts/v2_benchmark_compare.py`（独立 CLI：比较 + `--promote-baseline` 提升；退出码 0/2/3/5，**码表无 1**）+ `benchmark/baselines/baseline-v0.1.json`（机器可读正式基线，`s8_schema=benchmark-baseline-v1`，补齐 B.2#7「显式提升入库」）+ 附录 D | `core/v2/eval/compare.py` + `scripts/v2_benchmark_compare.py` + `benchmark/baselines/baseline-v0.1.json` + `tests/test_benchmark_compare.py`(59) + `.gitignore`(`benchmark/compares/`) + 设计文档附录 D | ✅ 完成（59 例全绿、全量 1378+3、ruff 双绿、零真实 LLM、零 DB 写入、S6 CLI 与评测口径 0 行改动）；已推送 `b09a388` |
 
 **Gold 独立性铁律（S4 已执行并留痕）**：Gold = `原始需求 → 人工独立分析 → Gold`；禁止 runtime 输出筛选闭环；Gold 是 floor 非 ceiling；TP 数量不设门槛、precision/recall 非唯一核心；`authoring_note`/`reference_cases` 全程留痕（bc_03~bc_10 未查阅任何素材，bc_02 仅命名口径核对）。
 
-**挂账事项**：① `ObligationExpected.target` 的 schema 注释"角色-资源"应更正为实际 `role:resource:action`（非阻塞，单独 cleanup）；② S7 解读报告时 requirement coverage 基线偏低属措辞漂移设计内结果，**禁止反向修改 Gold 迁就模型**；③ **D7①**（`POST /api/model-config` 缺空值守卫，可写入空 model/base_url）仅立案未改；④ **D13**：bc_01 §5.3 前后端双拦截覆盖、「验证码错误」场景挂 Gold v0.3；⑤ **bc_03_order_status 的 `obligations_expected` 为空** → bridge 轨对该 case 不可用，真实运行时其 requirement coverage 只能靠 identity+anchor，挂 Gold v0.3（`benchmark/gold` 属只读冻结面）；⑥ **bc_demo_login 2 条 `ri_` 指纹**（`gr-login-ok`/`gr-phone-len`）与重算值不符，因 `test_benchmark_formal_data.py` 只过滤 `bench-v0.1` 而从未触发；⑦ **D14**（多 Gold 场景 N>1 且反查 M≠N 时同按 D10 处理：`item_id=None`+pending、不猜归因）**已实施 ✅ `1d55415`** —— 实施前后证明 10 个 formal ideal runtime 的 3 个多 Gold 场景全部 N==M、守卫触发 0 次，formal 全绿契约与附录 C.5 数字零变化；⑧ **A2 断点续跑**已完成设计、未实施（见 §11.6）；⑨ **凭据轮换待用户处理**：2026-09-22 一次整表 `SELECT * FROM settings` 会把 V1 `settings` 的 `_fernet_key` 与一个 `tp-` 开头的 provider token 打到会话输出里（值不写入本文档）——建议在真实 LLM 运行结束后轮换该 token，并用「解密→改 key→经 `save_model_config` 重存」流程轮换 Fernet 主密钥；今后查该表只用哈希 + 字段级布尔断言；⑩ **token 用量无插桩**：`core/llm_client.py` 的 `_call_openai` 取得 `response.usage` 后直接丢弃（文件内 `UsageStats` 为 V1 遗留未接线），故 baseline 报告只能给调用数（§11.4.1 ⑰）；补齐属代码改动，须单独批准，**不得夹进任何 baseline 轮**。
+**挂账事项**：① `ObligationExpected.target` 的 schema 注释"角色-资源"应更正为实际 `role:resource:action`（非阻塞，单独 cleanup）；② S7 解读报告时 requirement coverage 基线偏低属措辞漂移设计内结果，**禁止反向修改 Gold 迁就模型**；③ **D7①**（`POST /api/model-config` 缺空值守卫，可写入空 model/base_url）仅立案未改；④ **D13**：bc_01 §5.3 前后端双拦截覆盖、「验证码错误」场景挂 Gold v0.3；⑤ **bc_03_order_status 的 `obligations_expected` 为空** → bridge 轨对该 case 不可用，真实运行时其 requirement coverage 只能靠 identity+anchor，挂 Gold v0.3（`benchmark/gold` 属只读冻结面）；⑥ **bc_demo_login 2 条 `ri_` 指纹**（`gr-login-ok`/`gr-phone-len`）与重算值不符，因 `test_benchmark_formal_data.py` 只过滤 `bench-v0.1` 而从未触发；⑦ **D14**（多 Gold 场景 N>1 且反查 M≠N 时同按 D10 处理：`item_id=None`+pending、不猜归因）**已实施 ✅ `1d55415`** —— 实施前后证明 10 个 formal ideal runtime 的 3 个多 Gold 场景全部 N==M、守卫触发 0 次，formal 全绿契约与附录 C.5 数字零变化；⑧ **A2 断点续跑**已实施 MVP-A（`e3c7e53`，见 §11.6）；⑨ **凭据轮换待用户处理**：2026-09-22 一次整表 `SELECT * FROM settings` 会把 V1 `settings` 的 `_fernet_key` 与一个 `tp-` 开头的 provider token 打到会话输出里（值不写入本文档）——建议在真实 LLM 运行结束后轮换该 token，并用「解密→改 key→经 `save_model_config` 重存」流程轮换 Fernet 主密钥；今后查该表只用哈希 + 字段级布尔断言；⑩ **token 用量无插桩**：`core/llm_client.py` 的 `_call_openai` 取得 `response.usage` 后直接丢弃（文件内 `UsageStats` 为 V1 遗留未接线），故 baseline 报告只能给调用数（§11.4.1 ⑰）；补齐属代码改动，须单独批准，**不得夹进任何 baseline 轮**。
 
 **S7 数字口径声明**：附录 C.5 表格中的 8/10、3/6、0.5994、43/66 等**只是本次三轨重构的回归对照基线（regression acceptance fixture）**，不得表述为产品质量目标、验收门槛或 AI 能力评分；deepseek 与 qwen 两列差异只陈述可观测事实，**不构成模型能力优劣排名**。裁决 D5（**2026-09-22 修订**）：v0.1 正式 baseline 模型由 `qwen3.8-flash` 改为 `qwen3.7-flash-2026-07-15`（免费额度按模型计量，原模型额度耗尽；用户指定更换、不换第二轮回补），DeepSeek 仅历史/对照 smoke；**任何跨模型指标不得混算，baseline 必须整轮 10 case 用同一模型跑完（用户明确否决"保留 4 个 + 换模型补 6 个"的拼接）**。裁决 D5（**2026-09-23 第三次修订，追加而非改写前文**）：`qwen3.7-flash-2026-07-15` 亦于 attempt #2 中途额度耗尽后，用户指定正式 baseline 模型改用 **`deepseek-v4.1-flash`**（provider 仍为阿里云百炼、同端点同密钥、未换 provider、未自决替换模型名），§11.4.1 即为该模型下的 baseline-v0.1 封存值；**§11.4.1 与 attempt #1/#2 及 DeepSeek 历史 smoke 数字不可跨模型混算或拼接**。
 
@@ -871,7 +875,7 @@ attempt #2 自证信号：`git_commit=74cf9db`、`git_dirty=false`、`case_set_d
 | # | 短板 | 证据 | 本轮处置 | 状态 |
 |---|---|---|---|---|
 | A1 | LLM 成本统计低报：`ir/review/optimizer` 的 `.chat()` 不进 `llm_calls` | attempt #2 摘要核对出 14 个"实际有调用但计 0"的阶段组合（`strategy`/`optimizer` 恒 0 是真实值——全仓只有 parser/tp_*/tc_generator/test_data_planner/review_soft/metrics_soft 打 `.chat()`） | `LLMClient` 计 `calls/attempts/successes/failures` + `llm_stats()`；Runtime 按阶段取增量写 `PipelineStepResult.llm_attempts/retries/failures`，`ir/review/optimizer` 计入 `total_llm_calls`；`StepTiming` 透传 | ✅ 14 组合转为回归 fixture |
-| A2 | 无断点续跑：一次中止整轮作废并重复付费 | 代码核对（§11.6） | 只出设计 | ⬜ 待实施 |
+| A2 | 无断点续跑：一次中止整轮作废并重复付费 | 代码核对（§11.6） | `e3c7e53` 实施 MVP-A：`--resume <runset_id>` + reusable/rerun/missing 三态 + 来源一致性硬门禁；`test_benchmark_runner.py` 82 例通过 | ✅ 已实施 |
 | A3 | S5 批次失败只留一行文本，语义分母被静默稀释 | attempt #2 两处 protocol 失败 | `BatchMeta.failure_kind`(transport/protocol/partial) + `evidence`(shape/raw_len/raw_sha256_12/dropped/unreturned，**禁落响应原文**)；批次失败与条目待人工可区分、批次互不污染 | ✅ |
 | A4 | pending 体量 191/142/96 条，人工复核不可行 | attempt #2 `pending_review`；**baseline-v0.1 更甚：S3 待人工条目合计 950、S5 判定 `pending_review` 750**（§11.4.1 / §11.8 口径提醒） | 未处理 | ⬜ 开放 |
 | A5 | bridge 轨可用性不齐：bc_03 `obligations_expected` 为空 | attempt #2 bc_03 bridge=0 | 未处理（挂 Gold v0.3，挂账⑤） | ⬜ 开放 |
@@ -882,7 +886,9 @@ attempt #2 自证信号：`git_commit=74cf9db`、`git_dirty=false`、`case_set_d
 **评测口径变更声明（唯一一处，且为预期目标）**：`total_llm_calls` 与 `cost_latency.llm_calls_per_case` 现含全部真实调用 → **历史 runset（含 attempt #2）的这两个数偏低，不得与新 run 直接比较**。其余 7 个 hard cell、三轨关联（`rails.py`/`matching.py` 零 diff）、S5 判定与治理丢弃规则、五态分类的**判定结果**均未变；既有测试文件 0 行删除（未改任何现有断言）。
 **已知边界**：case JSON 顶层 `pipeline.steps[]` 由 `scripts/v2_benchmark.py` 手写序列化，只带 `llm_calls`，对账三元组仅存在于 `metrics_hard.cost_latency.per_step[]`；若要在两处都看到需改 S6 CLI 3 行（待用户批准，S6 CLI 属冻结面）。
 
-### 11.6 A2 断点续跑设计（★仅设计，未实施）
+### 11.6 A2 断点续跑（✅ 已实施 MVP-A，`e3c7e53`）
+
+> 本节保留实施前的缺口分析与设计基线；实际实现见 `scripts/v2_benchmark.py --resume`、`core/v2/eval/runner_lib.py` 的三个纯函数以及 `tests/test_benchmark_runner.py` 的 82 例离线测试（含 24 例 resume）。
 
 1. **resume 能力缺口**：`scripts/v2_benchmark.py` 每次 `new_runset_id()` 生成 UTC 时间戳新目录并立刻写 `INCOMPLETE`，没有入口指向既有 runset；`runset.json`/`manifest.resolved.json`/`_COMPLETE.json` 全在单元循环**结束后**一次写，中途中止只剩 `INCOMPLETE` + 散落 `cases/*.json`；`prepare_benchmark_db()` 只有 `fresh`（删库+wal/shm/journal，默认）与 `reuse`（仅保证父目录），缺"保留已完成单元产物"第三态；`environment_fingerprint` 每次重算、与既有 runset 无比对。天然状态源其实是**增量原子写**的 `cases/<case_id>__rNN.json`，只是当前无人读。
 2. **最小改造文件（3 个，Runtime 0 行）**：`scripts/v2_benchmark.py`（`--resume <runset_id>` + `_plan_pending()` 裁剪计划 + 复用既有目录/ID + 循环后读旧+新 case 重算全量聚合）、`core/v2/eval/runner_lib.py`（`load_runset_record()`/`read_completed_units()`/`check_resume_compatibility()` 三个纯函数）、`tests/test_benchmark_runner.py`（离线 resume 用例）。**不改** Runtime、`metrics_hard/soft` 计算、`S6_SCHEMA_VERSION`（新字段 `.get()` 容错）、不加表不动 migration。
@@ -892,7 +898,7 @@ attempt #2 自证信号：`git_commit=74cf9db`、`git_dirty=false`、`case_set_d
 
 ### 11.7 新会话开工确认话术（当前）
 
-> "我已阅读 PROGRESS.md（§0 + §11 + §11.4.1 + §11.8）。当前：Step 1~10 完成；Step 11 的 S1~S7 + D14 + F1·F2 + 架构观测性（A1/A3/A7/A8）全部完成并推送（代码侧同步于 `9f7888c`）。**★正式 baseline-v0.1 已成立**：runset `bm-bench-v0-1-20260923T055019Z`，模型 `deepseek-v4.1-flash`（阿里云百炼），`git_commit=731e013` / `git_dirty=false` / `case_set_digest=d9b5bb552b1833d9debd0e1d75fa6f31`，**10/10 completed、EXIT=0、retries=0、failures=0、1254 次调用 / 5862 s、未与 attempt #2 拼接**（封存见 §11.4.1，已推 `12728ea`）。**S8 Compare/Delta 已完成**（compare.py + v2_benchmark_compare.py + `benchmark/baselines/baseline-v0.1.json` 机器可读基线 + 59 例离线测试；无门禁、零 LLM、零 DB；见 §11.8），全量 1378 passed + 3 skipped、ruff 双绿、schema_version=10、三库哈希未变。开放项：A2 续跑（设计就绪待实施）、A4/A5/A6 短板（A6 已在 baseline 10/10 复现 identity=0）、A8 根因、token 用量插桩（挂账⑩）、D7①、D13/Gold v0.3、凭据轮换。请给下一步指令。"
+> "我已阅读 PROGRESS.md（§0 + §11 + §11.4.1 + §11.8 + §12）。当前：Step 1~11 完成；A2 断点续跑已实施（`e3c7e53`）；Step 12.1 V2 导出已完成（Excel/Markdown + 15 个 V2 端点 + 前端用例页/报告页入口 + 9 例离线测试），12.2 材料引用 / 12.3 文件输入待做。全量 1419 passed + 13 skipped、ruff 双绿、schema_version=10。开放项：A4/A5/A6 短板（A6 已在 baseline 10/10 复现 identity=0）、A8 根因、token 用量插桩（挂账⑩）、D7①、D13/Gold v0.3、凭据轮换；Step 13 偏好学习待真实编辑数据。请给下一步指令。"
 
 ### 11.8 S8 Compare / Delta 实施记录（2026-09-23，只读比较层）
 
@@ -915,4 +921,44 @@ attempt #2 自证信号：`git_commit=74cf9db`、`git_dirty=false`、`case_set_d
 **口径提醒**：`totals.hard_pending_review=950`（S3 待人工条目）与 `s5_verdict_totals.pending_review=750`（S5 判定）是两个不同层的字段，禁止互换引用。
 
 **验收**：S8 新增 59 例全绿；全量 **1378 passed + 3 skipped**（零回归）；`ruff check` + `ruff format --check` 全绿；`ddl.SCHEMA_VERSION` 仍 **10**；`data/data.db` `66e6b1af471c7dc7`、`data/data_v2.db` `8acbeac76b6f701b`、`benchmark/data/benchmark_v2.db` `35aafb9cb32cda3c` 三库哈希跨全量测试前后一致；`benchmark/{cases,gold,manifests}`、`core/v2/runtime.py`、`scripts/v2_benchmark.py`、`metrics_hard/soft`、`matching`、`rails`、`runner_lib`、`eval/schema`、`core/schemas` **diff 全 0**。另动 `.gitignore` 一行（新增 `benchmark/compares/`，与 `benchmark/runsets/` 同族派生产物纪律）。
-**明确不做**：CI 门禁/阈值、regression 非零退出、A2/A4/A5/A6、A8 根因、token 插桩（挂账⑩，报告 caveats 显式声明"不可得且不估算"）、任何 Gold/数据集/评测口径改动。
+**明确不做**：CI 门禁/阈值、regression 非零退出、A2/A4/A5/A6（A2 后于 `e3c7e53` 单独实施，不改变 S8 边界）、A8 根因、token 插桩（挂账⑩，报告 caveats 显式声明"不可得且不估算"）、任何 Gold/数据集/评测口径改动。
+
+---
+
+## 12. Step 12「V2 交付闭环」（🟡 进行中）
+
+**背景（2026-10-26 路线确认）**：Step 11 收口后，产品层仍缺“结果出不去 / 输入只能粘贴”的闭环。用户拍板 Step 12 优先做交付闭环，Step 13 偏好学习后置。范围约束：零真实 LLM、不改 Schema/DDL/Runtime/V1 运行时、不接 Benchmark 判定面。
+
+### 12.0 文档对齐 ✅
+
+- 本文件：A2 更新为已实施；测试基线更新为 1419 + 13 skipped；路由与 Step 12 状态回写。
+- `AGENTS.md` / `README.md`：V2 默认 `/`、V1 `/v1`；V2 端点 14→15；导出能力说明。
+- 提交：随本次 Step 12.1 一起提交。
+
+### 12.1 V2 导出 Excel / Markdown ✅
+
+| 项 | 内容 |
+|---|---|
+| 后端 | `core/v2/export.py`（Excel 双 sheet「测试用例 / 运行信息」+ Markdown 按模块分组；保留状态/来源/生成方式/DataPlan；默认调用方过滤 ARCHIVED） |
+| 服务 | `web/v2_service.export_run`：Run 归属校验（不匹配→404）、格式校验（xlsx/md）、安全文件名 |
+| 路由 | `GET /api/v2/runs/<run_id>/export?format=xlsx\|md`（V2 端点 14→15；login_required + V2_READY gating） |
+| 前端 | `frontend-v2/src/api/v2.ts` 下载封装 + `run/useExportRun.ts` + 测试用例页/报告页导出按钮；构建产物 `static/v2/` 已更新 |
+| 测试 | `tests/test_v2_export.py` 9 例：Excel/MD 内容、ARCHIVED 过滤、格式 400、缺失/他人 Run 404、未登录 401、gating 503、空运行、文件名安全 |
+| 验收 | 全量 **1419 passed + 13 skipped**；ruff 双绿；浏览器实测两个入口分别产生 `export?format=xlsx` / `format=md` 200，控制台无 error |
+
+**默认口径**：导出全部存活用例（不含 ARCHIVED）；Excel 含“测试数据”列与运行信息 sheet；Markdown 按模块分组。
+
+### 12.2 材料引用 ⬜
+
+- 计划：`POST /api/v2/runs` 增加可选 `material_ids`，服务层用 V1 `get_materials_for_prompt` 取当前用户材料并拼入需求上下文；新建运行页材料多选。
+- 待确认：MVP 只引用材料文本，不传材料图片。
+
+### 12.3 文件输入 ⬜
+
+- 计划：新增 multipart 上传入口，支持 md/txt/xlsx/xls + 图片；复用 Runtime 已有 `paths` 入参；PDF/Word 继续延后。
+- 待确认：上传大小/格式上限与临时目录清理策略。
+
+### 已知边界 / 未夹带
+
+- 现有 6 个 V2 GET 查询端点只有登录校验、未校验 Run 归属；本次只在导出端点补 owner 校验，其余未改（单独排期）。
+- 不做异步任务/SSE/配额限流；不做 Step 13 偏好学习；不改 benchmark/Gold/评测口径。

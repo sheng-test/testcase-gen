@@ -4,16 +4,17 @@
         业务流程全下沉到 core/v2/runtime.py（Runtime 是 Run 状态唯一控制者）。
 ★ P0-4：POST /runs 同步执行 = MVP 已知限制；10.3 不实现 Celery / Redis / 消息队列 / 后台 Job，异步化留未来。
 ★ P0-5：只接已有 core/v2 能力，不扩 Runtime、不新增 AI 能力、不做文件上传（POST /runs 仅 JSON）。
-★ 端点（Step 10.3.1 + Step 11 UI 重构）：共 14 个 /api/v2/* 端点 = health + POST /runs + GET /runs（列表）
-        + GET /runs/<id>{,/test-points,/test-cases,/review,/optimizer,/coverage,/requirements}
+★ 端点（Step 10.3.1 + Step 11 UI 重构 + Step 12.1 导出）：共 15 个 /api/v2/* 端点 = health + POST /runs + GET /runs（列表）
+        + GET /runs/<id>{,/test-points,/test-cases,/review,/optimizer,/coverage,/requirements,/export}
         + POST /test-cases/<id>{/edit,/re-review} + GET /test-cases/<id>{/revisions,/trace}。
 """
 
 from __future__ import annotations
 
 import logging
+from io import BytesIO
 
-from flask import Blueprint, current_app, jsonify, request, session
+from flask import Blueprint, current_app, jsonify, request, send_file, session
 
 from core.v2 import repository as repo
 from web import v2_service
@@ -160,6 +161,24 @@ def v2_get_requirements(run_id):
     if ctx is None:
         return jsonify({"error": f"Run 不存在: {run_id}"}), 404
     return jsonify({"success": True, "requirements": ctx})
+
+
+@bp.route("/api/v2/runs/<run_id>/export", methods=["GET"])
+@login_required
+def v2_export_run(run_id):
+    """导出当前用户自己的 Run（Step 12.1）：format=xlsx|md，默认排除 ARCHIVED 用例。
+
+    归属不匹配按 404 处理（不暴露他人 Run 是否存在）。
+    """
+    fmt = request.args.get("format") or "xlsx"
+    try:
+        result = v2_service.export_run(session["user_id"], run_id, fmt)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    if result is None:
+        return jsonify({"error": f"Run 不存在: {run_id}"}), 404
+    data, mimetype, filename = result
+    return send_file(BytesIO(data), mimetype=mimetype, as_attachment=True, download_name=filename)
 
 
 # ============================================================

@@ -5,8 +5,8 @@
 
 ★ MVP 限制（P0-4）：同步执行，不实现 Celery / Redis / 消息队列 / 后台 Job。
 ★ 范围（P0-5）：只把已有 core/v2 能力接到 Web，不扩 Runtime、不新增 AI 能力。
-★ 端点（Step 10.3.1 + Step 11 UI 重构）：共 14 个 /api/v2/* 端点
-        （1 健康检查 + 1 POST /runs + 8 Run/资产查询 + 4 TestCase 人工/追溯）。
+★ 端点（Step 10.3.1 + Step 11 UI 重构 + Step 12.1 导出）：共 15 个 /api/v2/* 端点
+        （1 健康检查 + 1 POST /runs + 9 Run/资产查询/导出 + 4 TestCase 人工/追溯）。
 """
 
 from __future__ import annotations
@@ -19,7 +19,8 @@ from enum import Enum
 from flask import current_app
 from pydantic import BaseModel
 
-from core.schemas import SourceType, new_ulid
+from core.schemas import SourceType, TestCaseStatus, new_ulid
+from core.v2 import export as export_lib
 from core.v2 import repository as repo
 from core.v2 import traceability
 from core.v2.client_factory import build_llm_client
@@ -156,6 +157,55 @@ def test_case_exists(tc_id: str) -> bool:
 def get_run_detail(run_id: str) -> dict | None:
     run = repo.get_run(run_id)
     return _jsonable(run) if run is not None else None
+
+
+def export_run(session_user_id: int, run_id: str, fmt: str) -> tuple[bytes, str, str] | None:
+    """导出当前用户自己的 Run（默认排除 ARCHIVED）。
+
+    返回 (内容, MIME, 文件名)；Run 不存在或不属于当前用户 → None（上层统一 404，避免泄露他人 Run）。
+    """
+    run = repo.get_run(run_id)
+    if run is None:
+        return None
+    user_row = repo.get_user_by_legacy_id(session_user_id)
+    if user_row is None or run.user_id != user_row["id"]:
+        return None
+
+    fmt = (fmt or "").strip().lower()
+    if fmt in {"xlsx", "excel"}:
+        ext = "xlsx"
+        mimetype = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    elif fmt in {"md", "markdown"}:
+        ext = "md"
+        mimetype = "text/markdown; charset=utf-8"
+    else:
+        raise ValueError(f"不支持的导出格式: {fmt or '(空)'}（可选 xlsx / md）")
+
+    all_cases = repo.list_test_cases(run_id)
+    cases = [case for case in all_cases if case.status != TestCaseStatus.ARCHIVED]
+    doc = repo.get_doc(run.doc_id)
+    title = doc.title if doc is not None and doc.title else "(无标题)"
+    exported_at = datetime.now()
+    filename = export_lib.safe_export_filename(title, ext=ext, exported_at=exported_at)
+
+    if ext == "xlsx":
+        data = export_lib.export_test_cases_excel(
+            cases,
+            run_title=title,
+            run_id=run_id,
+            archived_excluded=len(all_cases) - len(cases),
+            exported_at=exported_at,
+        )
+    else:
+        data = export_lib.export_test_cases_markdown(
+            cases,
+            run_title=title,
+            run_id=run_id,
+            archived_excluded=len(all_cases) - len(cases),
+            exported_at=exported_at,
+        ).encode("utf-8")
+
+    return data, mimetype, filename
 
 
 def list_runs(session_user_id: int, limit: int = 50) -> list[dict]:

@@ -2,7 +2,7 @@
 
 基于大模型（LLM）的 AI 测试用例生成辅助平台（AI Test Case Generation Assistant Platform）。输入需求描述或 UI 截图，AI 自动生成测试点和测试用例，支持 Excel / Markdown 导出。
 
-当前有两条并存的产品线：**V1**（`/`，Prompt→用例的自由文本链路，见下表）与 **V2**（`/v2`，按 13 步蓝图重构的**结构化测试工程链路**：Requirement IR → 策略引擎 → 用例合成 → 追溯 → 6 维评审 → 去重优化 → 人工编辑闭环 → Runtime 一键串联 → Benchmark 质量评价）。V2 不是「Prompt→LLM→结果」，而是「结构化数据 → 规则/策略 → LLM → 结构化数据 → Validator → Reviewer → 结构化数据」：确定性关注点代码化，LLM 只做语义理解与内容生成，产物一律先过代码校验再入库。进度与决策见 `docs/v2/PROGRESS.md`。
+当前有两条并存的产品线：**V1**（`/v1`，Prompt→用例的自由文本链路，见下表）与 **V2**（`/`，登录后默认进入；按 13 步蓝图重构的**结构化测试工程链路**：Requirement IR → 策略引擎 → 用例合成 → 追溯 → 6 维评审 → 去重优化 → 人工编辑闭环 → Runtime 一键串联 → Benchmark 质量评价 → Excel/Markdown 导出）。V2 不是「Prompt→LLM→结果」，而是「结构化数据 → 规则/策略 → LLM → 结构化数据 → Validator → Reviewer → 结构化数据」：确定性关注点代码化，LLM 只做语义理解与内容生成，产物一律先过代码校验再入库。进度与决策见 `docs/v2/PROGRESS.md`。
 
 ---
 
@@ -23,6 +23,7 @@
 | **V2 结构化链路** | Requirement IR（Pydantic 严格校验）→ 测试点 → 策略引擎（代码算边界/等价类/权限矩阵）→ 用例合成 → 追溯链与变更影响 → 6 维评审 → 语义去重归档 → 人工编辑（Revision 快照 + 乐观锁） |
 | **V2 Runtime** | 一次调用串起 Step 2→8（`run_v2_pipeline`），Web / CLI 同一条路径 |
 | **V2 质量基准** | bench-v0.1（10 case + 83 条人工独立 Gold）+ 四态 Matching + 三轨关联 + 硬/软双轨评价 + 五态可靠性 + 环境指纹 runset |
+| **V2 用例导出** | 运行详情可直接导出 Excel / Markdown，默认排除已归档用例；导出内容含步骤、预期、测试数据、状态与来源 |
 | **正式 baseline-v0.1** | 10/10 case 全量真实跑通并封存（模型 `deepseek-v4.1-flash` / 阿里云百炼），机器可读基线入库 |
 | **S8 Compare / Delta** | 任一新 runset 与 baseline 做逐格 delta（improvement / regression / unchanged），跨模型/跨数据集自动判不可比，无 CI 门禁 |
 
@@ -49,7 +50,7 @@
 |:-------:|:-------:|
 | ![材料](screenshots/v2r-10-materials.png) | ![设置](screenshots/v2r-11-settings.png) |
 
-> V1 界面（`/`）的历史截图仍保留在 `screenshots/dashboard.png`、`testcase.png`、`testpoints.png`。
+> V1 界面（`/v1`）的历史截图仍保留在 `screenshots/dashboard.png`、`testcase.png`、`testpoints.png`。
 > 走查清单与结论见 `docs/v2/v2-ui-react-refactor.md`。
 
 ---
@@ -67,8 +68,8 @@ cp config.yaml.example config.yaml
 python start.py                  # 浏览器自动打开 http://localhost:5000
 python start.py -p 8080 --debug  # 指定端口 + 调试模式
 
-# V2 页面：http://localhost:5000/v2 （复用 V1 登录态；改代码/提示词需重启，
-#          但 Web 内「模型配置」保存后实时生效——它优先于 config.yaml）
+# V2 页面：登录后默认进入 http://localhost:5000/（V1 在 http://localhost:5000/v1）
+#          复用 V1 登录态；改代码/提示词需重启，但 Web 内「模型配置」保存后实时生效
 ```
 
 ### 质量基准（Benchmark）
@@ -99,7 +100,7 @@ docker-compose up -d
 
 ```
 testcase-gen/
-├── start.py              # Web 启动入口（V1 在 /，V2 在 /v2）
+├── start.py              # Web 启动入口（登录后默认进 V2；V1 在 /v1）
 ├── main.py               # 命令行入口
 ├── AGENTS.md / CLAUDE.md # 项目速查与协作约定（两文件同内容）
 ├── .claude/ .agents/ .codex/  # 助手侧配置：技能（斜杠命令）与子代理
@@ -122,7 +123,7 @@ testcase-gen/
 │   │                     #   compare（S8 只读 Compare/Delta）
 ├── web/                  # Web 路由
 │   ├── data.py generate.py auth.py      # [V1] API
-│   └── v2_service.py v2_routes.py       # [V2] 14 个 /api/v2/* 端点（复用 V1 鉴权）
+│   └── v2_service.py v2_routes.py       # [V2] 15 个 /api/v2/* 端点（复用 V1 鉴权）
 ├── static/               # [V1] 原生前端；static/v2/ 为 V2 构建产物
 ├── frontend-v2/          # [V2] React + TS + Vite 源码（Run-centric IA）
 ├── templates/v2.html     # [V2] SPA 壳
@@ -133,7 +134,7 @@ testcase-gen/
 │   ├── runsets/          # Runner 快照（gitignore，本地验收产物）
 │   └── compares/         # S8 比较报告（gitignore，派生产物）
 ├── docs/v2/              # V2 蓝图/进度（PROGRESS.md 为单一真相源）+ 各 Step 设计
-├── tests/                # pytest 测试（1378 passed + 3 skipped）
+├── tests/                # pytest 测试（1419 passed + 13 skipped）
 ├── data/data.db          # [V1] 数据库
 ├── data/data_v2.db       # [V2] 独立数据库（schema_version=10）
 ├── config.yaml           # 配置（不追踪 git）
@@ -166,7 +167,7 @@ testcase-gen/
 ## 🧪 测试与代码规范
 
 ```bash
-pytest                              # 全部测试（1378 passed + 3 skipped；含 V1 原有 126 例零回归）
+pytest                              # 全部测试（1419 passed + 13 skipped；含 V1 原有 126 例零回归）
 pytest tests/test_generator.py -v   # 指定模块
 pytest tests/test_benchmark_compare.py -v   # V2 Step 11 S8 比较层（全离线，零 LLM）
 pytest --cov=. --cov-report=term     # 覆盖率报告
@@ -177,7 +178,7 @@ ruff format .                       # 格式检查
 python scripts/v2_step10_verify.py
 ```
 
-> `3 skipped` = 标记为 `real_llm` 的真实模型用例，默认跳过（避免烧额度）；设 `V2_RUN_REAL_LLM=1` 后启用。
+> `13 skipped` = 10 个依赖本地 benchmark smoke 库的用例（库缺失时跳过）+ 3 个标记为 `real_llm` 的真实模型用例；后者设 `V2_RUN_REAL_LLM=1` 后启用（避免烧额度）。
 
 ---
 

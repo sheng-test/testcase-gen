@@ -14,6 +14,7 @@ import { reReview } from "../api/v2";
 import { useToast } from "../components/Toast";
 import { CaseStatusBadge, ProvBadge } from "../components/ui";
 import { useRunBundle } from "./RunBundle";
+import { useExportRun } from "./useExportRun";
 import { CASE_STATUS_LABEL } from "../utils";
 import type { TestCase } from "../types";
 
@@ -42,6 +43,7 @@ function railClass(t: TestCase): string {
 export function TestCasesTab() {
   const { testCases, openCase, run, reload } = useRunBundle();
   const toast = useToast();
+  const { exporting, exportRun } = useExportRun(run.id);
   const [params] = useSearchParams();
   const [chip, setChip] = useState(params.get("status") || "");
   const [prio, setPrio] = useState("");
@@ -115,6 +117,25 @@ export function TestCasesTab() {
             </option>
           ))}
         </select>
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+        <span className="t-aux">导出全部存活用例（默认不含已归档）</span>
+        <span style={{ flex: 1 }} />
+        <button
+          className="btn btn-sm btn-outline"
+          onClick={() => exportRun("xlsx")}
+          disabled={exporting !== null || !testCases.length}
+        >
+          {exporting === "xlsx" ? "导出中..." : "导出 Excel"}
+        </button>
+        <button
+          className="btn btn-sm btn-outline"
+          onClick={() => exportRun("md")}
+          disabled={exporting !== null || !testCases.length}
+        >
+          {exporting === "md" ? "导出中..." : "导出 Markdown"}
+        </button>
       </div>
 
       <table className="table">

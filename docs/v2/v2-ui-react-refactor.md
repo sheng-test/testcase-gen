@@ -72,4 +72,4 @@ Runtime、状态机、schema_version=10。
 2. Run 详情一次性并发拉 7 端点，超大用例集（数千）建议分页——当前 300 行截断 + 筛选兜底。
 3. Project / TestTask（任务跨 Run、任务级归档/命名/材料）与 Material→Requirement Context→Runtime
    引用链路 = 未来独立后端设计（需路线评审）。
-4. 导出 Excel/Markdown（V2 端点无此能力）、自动化执行（Step 12+）继续保持不伪装原则。
+4. 导出 Excel/Markdown 已于 Step 12.1 落地（`GET /api/v2/runs/<id>/export` + 用例页/报告页入口，默认排除 ARCHIVED）；自动化执行仍留 Step 12+，继续保持不伪装原则。

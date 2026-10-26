@@ -49,4 +49,6 @@ data.db
 # V2 前端（React + TS + Vite）：依赖与中间物不入库；构建产物 static/v2/ 故意提交（部署无需 Node）
 frontend-v2/node_modules/
 frontend-v2/dist/
+# Vite 构建的占位 HTML 不被 Flask 使用（真正入口是 templates/v2.html）
+static/v2/index.html
 frontend-v2/*.tsbuildinfo

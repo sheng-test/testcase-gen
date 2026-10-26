@@ -7,11 +7,13 @@ import { Link } from "react-router-dom";
 import { Pipeline } from "../components/pipeline";
 import { RunStatusBadge, Section, StatStrip } from "../components/ui";
 import { useRunBundle } from "./RunBundle";
+import { useExportRun } from "./useExportRun";
 import { DIMENSION_LABEL } from "../utils";
 
 export function ReportTab() {
   const b = useRunBundle();
   const { run, title, requirements, testPoints, testCases, review, coverage, optimizer } = b;
+  const { exporting, exportRun } = useExportRun(run.id);
   const c = run.counts || {};
   const llm = testPoints.filter((p) => (p.provenance || "").toUpperCase() === "LLM").length;
   const strategy = testPoints.filter((p) => (p.provenance || "").toUpperCase() === "STRATEGY").length;
@@ -109,6 +111,21 @@ export function ReportTab() {
         <Link className="btn btn-outline" to={`/runs/${run.id}/review`}>
           进入 AI 评审
         </Link>
+        <span style={{ flex: 1 }} />
+        <button
+          className="btn btn-outline"
+          onClick={() => exportRun("xlsx")}
+          disabled={exporting !== null || !testCases.length}
+        >
+          {exporting === "xlsx" ? "导出中..." : "导出 Excel"}
+        </button>
+        <button
+          className="btn btn-outline"
+          onClick={() => exportRun("md")}
+          disabled={exporting !== null || !testCases.length}
+        >
+          {exporting === "md" ? "导出中..." : "导出 Markdown"}
+        </button>
       </div>
     </div>
   );

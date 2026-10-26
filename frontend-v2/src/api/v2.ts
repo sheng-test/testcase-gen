@@ -1,9 +1,9 @@
 // ============================================================
-// V2 API 端点封装（/api/v2/*，共 14 个端点，与 web/v2_routes.py 一一对应）
+// V2 API 端点封装（/api/v2/*，共 15 个端点，与 web/v2_routes.py 一一对应）
 // 原则：本轮 UI 只调用已存在的端点，不新增、不绕过 gating。
 // ============================================================
 
-import { apiJson, jsonInit } from "./client";
+import { apiJson, authFetch, jsonInit } from "./client";
 import type {
   CaseRevision,
   EditResult,
@@ -61,6 +61,40 @@ export const getCoverage = (runId: string) =>
 
 export const getRequirements = (runId: string) =>
   apiJson<{ requirements: RequirementsContext }>(`/api/v2/runs/${runId}/requirements`).then((d) => d.requirements);
+
+export type ExportFormat = "xlsx" | "md";
+
+function filenameFromDisposition(header: string | null): string | null {
+  if (!header) return null;
+  const utf8 = /filename\*=UTF-8''([^;]+)/i.exec(header);
+  if (utf8) {
+    try {
+      return decodeURIComponent(utf8[1]);
+    } catch {
+      return utf8[1];
+    }
+  }
+  const plain = /filename="?([^";]+)"?/i.exec(header);
+  return plain ? plain[1] : null;
+}
+
+export async function downloadRunExport(runId: string, format: ExportFormat): Promise<void> {
+  const r = await authFetch(`/api/v2/runs/${runId}/export?format=${format}`);
+  if (!r.ok) {
+    const body = (await r.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(body?.error || `导出失败 (${r.status})`);
+  }
+  const blob = await r.blob();
+  const filename = filenameFromDisposition(r.headers.get("Content-Disposition")) || `testcases.${format}`;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
 
 // ---- TestCase 人工操作（Step 9）+ 追溯（Step 6）----
 
