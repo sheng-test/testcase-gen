@@ -12,14 +12,19 @@
 from __future__ import annotations
 
 import logging
+import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import fields, is_dataclass
 from datetime import date, datetime
 from enum import Enum
+from pathlib import Path
 
 from flask import current_app
 from pydantic import BaseModel
 
 from core import db as v1_db
+from core.reader import IMAGE_EXTS
 from core.schemas import SourceType, TestCaseStatus, new_ulid
 from core.v2 import export as export_lib
 from core.v2 import repository as repo
@@ -28,11 +33,45 @@ from core.v2.client_factory import build_llm_client
 from core.v2.ddl import get_schema_version
 from core.v2.human_editor import edit_test_case as _edit_test_case
 from core.v2.human_editor_orchestrator import re_review_test_cases as _re_review_cases
+from core.v2.ingestion import EXCEL_EXTS
 from core.v2.runtime import run_v2_pipeline
 
 logger = logging.getLogger("web.v2_service")
 
 MAX_MATERIALS = 5
+MAX_UPLOAD_FILES = 10
+ALLOWED_UPLOAD_EXTS = {".md", ".txt", *IMAGE_EXTS, *EXCEL_EXTS}
+
+
+@contextmanager
+def uploaded_paths(files) -> Iterator[list[str]]:
+    """把上传文件落到随机临时目录，交给 Runtime 后自动清理（不使用原始文件名做路径）。"""
+    with tempfile.TemporaryDirectory(prefix="v2_upload_") as tmpdir:
+        paths: list[str] = []
+        for idx, storage in enumerate(files):
+            suffix = Path(storage.filename or "").suffix.lower()
+            target = Path(tmpdir) / f"{idx}{suffix}"
+            storage.save(str(target))
+            paths.append(str(target))
+        yield paths
+
+
+def derive_source_type(paths: list[str] | None, text: str, fallback: str) -> str:
+    """按纯文件上传的扩展名推导 SourceType；有手写文本或混合文件时沿用 fallback。"""
+    try:
+        fallback_type = SourceType(fallback)
+    except ValueError:
+        fallback_type = SourceType.TEXT
+    if not paths or text.strip():
+        return fallback_type.value
+    exts = {Path(p).suffix.lower() for p in paths}
+    if exts <= IMAGE_EXTS:
+        return SourceType.IMAGE.value
+    if exts <= EXCEL_EXTS:
+        return SourceType.EXCEL.value
+    if exts <= {".md"}:
+        return SourceType.MARKDOWN.value
+    return SourceType.TEXT.value
 
 
 def _material_context(session_user_id: int, material_ids: list[int] | None) -> str:
@@ -46,7 +85,8 @@ def _material_context(session_user_id: int, material_ids: list[int] | None) -> s
 def _inject_material_context(text: str, materials: str) -> str:
     if not materials:
         return text
-    return f"{text}\n\n## 项目参考资料（仅作背景上下文，不单独作为需求项）\n{materials}"
+    header = "## 项目参考资料（仅作背景上下文，不单独作为需求项）"
+    return f"{text}\n\n{header}\n{materials}" if text else f"{header}\n{materials}"
 
 
 # ============================================================
@@ -143,12 +183,14 @@ def create_run_and_generate(
     text: str,
     source_type: str = "text",
     material_ids: list[int] | None = None,
+    paths: list[str] | None = None,
 ) -> dict:
     """解析 V2 user → 注入项目材料 → run_v2_pipeline（同步）→ 序列化结果。
 
     ★ P0-3：Runtime FAILED 时 payload 保留 run_id / status / failed_step / error_message，
       绝不塌缩成 {"success": false}，让前端能定位挂在哪一步。
     ★ 材料只取当前用户自己的文本内容，作为背景上下文拼入需求；不改变 Runtime/Schema。
+    ★ paths 为上传文件的临时路径，由 uploaded_paths 负责创建与清理。
     """
     v2_uid = _resolve_v2_user_id(session_user_id, username)
     try:
@@ -157,7 +199,7 @@ def create_run_and_generate(
         st = SourceType.TEXT
     materials = _material_context(session_user_id, material_ids)
     text = _inject_material_context(text, materials)
-    result = run_v2_pipeline(user_id=v2_uid, title=title, text=text, source_type=st)
+    result = run_v2_pipeline(user_id=v2_uid, title=title, text=text, paths=paths, source_type=st)
     payload = _jsonable(result)
     if result.run_id:
         run = repo.get_run(result.run_id)

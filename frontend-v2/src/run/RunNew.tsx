@@ -8,7 +8,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { listMaterials } from "../api/v1";
-import { createRun } from "../api/v2";
+import { createRun, createRunWithFiles } from "../api/v2";
 import { Shell } from "../layout/Shell";
 import { useToast } from "../components/Toast";
 import { STEP_LABEL } from "../utils";
@@ -19,6 +19,7 @@ export function RunNew() {
   const [text, setText] = useState("");
   const [materials, setMaterials] = useState<MaterialListItem[] | null>(null);
   const [materialIds, setMaterialIds] = useState<number[]>([]);
+  const [files, setFiles] = useState<File[]>([]);
   const [running, setRunning] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [failedRunId, setFailedRunId] = useState<string | null>(null);
@@ -44,15 +45,17 @@ export function RunNew() {
   };
 
   const start = async () => {
-    if (!title.trim() || !text.trim()) {
-      toast("请填写需求标题与需求描述", "warn");
+    if (!title.trim() || (!text.trim() && !files.length)) {
+      toast("请填写需求标题，并提供需求文本或至少一个文件", "warn");
       return;
     }
     setRunning(true);
     setErr(null);
     setFailedRunId(null);
     try {
-      const d = await createRun(title.trim(), text.trim(), "text", materialIds);
+      const d = files.length
+        ? await createRunWithFiles(title.trim(), text.trim(), files, materialIds)
+        : await createRun(title.trim(), text.trim(), "text", materialIds);
       if (d.success === false || d.status === "failed") {
         setErr(
           `运行未完成：失败于「${STEP_LABEL[d.failed_step || ""] || d.failed_step || "未知阶段"}」——${d.error_message || "无错误详情"}`,
@@ -126,6 +129,43 @@ export function RunNew() {
               <Link className="btn btn-sm btn-ghost" to="/resources/materials">
                 去管理项目材料 →
               </Link>
+            </div>
+            <div className="form-group">
+              <label>④ 需求文件（可选）</label>
+              <input
+                type="file"
+                multiple
+                accept=".md,.txt,.xlsx,.xls,.png,.jpg,.jpeg,.gif,.webp,.bmp"
+                disabled={running}
+                onChange={(e) => {
+                  const selected = Array.from(e.target.files || []);
+                  if (selected.length > 10) {
+                    toast("最多上传 10 个文件", "warn");
+                    e.target.value = "";
+                    return;
+                  }
+                  setFiles(selected);
+                }}
+              />
+              {files.length ? (
+                <div className="file-list">
+                  {files.map((file, idx) => (
+                    <div key={`${file.name}-${idx}`} className="file-item">
+                      <span>{file.name}</span>
+                      <button
+                        className="btn btn-sm btn-ghost"
+                        onClick={() => setFiles(files.filter((_, i) => i !== idx))}
+                        disabled={running}
+                      >
+                        移除
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              <div className="hint muted small" style={{ marginTop: 6 }}>
+                支持 md/txt/xlsx/xls 与图片，最多 10 个文件；PDF/Word 暂不支持。文本与文件至少提供一个。
+              </div>
             </div>
             {err ? (
               <div className="alert alert-error">

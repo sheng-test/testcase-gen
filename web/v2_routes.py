@@ -3,7 +3,7 @@
 ★ P0-2：本层只负责 HTTP（参数校验 → 调 v2_service → 统一响应）；绝不控制 Run 状态、不实现业务流程。
         业务流程全下沉到 core/v2/runtime.py（Runtime 是 Run 状态唯一控制者）。
 ★ P0-4：POST /runs 同步执行 = MVP 已知限制；10.3 不实现 Celery / Redis / 消息队列 / 后台 Job，异步化留未来。
-★ P0-5：只接已有 core/v2 能力，不扩 Runtime、不新增 AI 能力、不做文件上传（POST /runs 仅 JSON）。
+★ P0-5：只接已有 core/v2 能力，不扩 Runtime、不新增 AI 能力；POST /runs 支持 JSON 与 multipart（Step 12.3 文件输入）。
 ★ 端点（Step 10.3.1 + Step 11 UI 重构 + Step 12.1 导出）：共 15 个 /api/v2/* 端点 = health + POST /runs + GET /runs（列表）
         + GET /runs/<id>{,/test-points,/test-cases,/review,/optimizer,/coverage,/requirements,/export}
         + POST /test-cases/<id>{/edit,/re-review} + GET /test-cases/<id>{/revisions,/trace}。
@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 from io import BytesIO
+from pathlib import Path
 
 from flask import Blueprint, current_app, jsonify, request, send_file, session
 
@@ -55,42 +56,96 @@ def v2_health():
 # ============================================================
 
 
+def _parse_material_ids(raw, *, is_form: bool) -> list[int] | None:
+    """解析 JSON 数组或 multipart 的 material_ids；非法输入抛 ValueError。"""
+    if raw is None:
+        return None
+    if is_form:
+        values = raw if isinstance(raw, list) else [raw]
+        tokens: list[str] = []
+        for value in values:
+            tokens.extend(part.strip() for part in str(value).split(",") if part.strip())
+        try:
+            ids = [int(token) for token in tokens]
+        except ValueError as exc:
+            raise ValueError("material_ids 必须为整数数组") from exc
+    else:
+        if not isinstance(raw, list) or not all(isinstance(x, int) and not isinstance(x, bool) for x in raw):
+            raise ValueError("material_ids 必须是整数数组")
+        ids = list(raw)
+    if not ids:
+        return None
+    if any(x <= 0 for x in ids):
+        raise ValueError("material_ids 必须为正整数")
+    ids = list(dict.fromkeys(ids))
+    if len(ids) > v2_service.MAX_MATERIALS:
+        raise ValueError(f"最多选择 {v2_service.MAX_MATERIALS} 个项目材料")
+    return ids
+
+
 @bp.route("/api/v2/runs", methods=["POST"])
 @login_required
 @csrf_protect
 def v2_create_run():
-    """创建 Run + 同步触发全链路（Step 2→8）。仅 JSON（P0-5：不做文件上传）。
+    """创建 Run + 同步触发全链路（Step 2→8）。支持 JSON 与 multipart（文件上传）。
 
     错误分级（P0-3）：400 参数 / 401 未登录（login_required）/ 403 CSRF（csrf_protect）/
     503 V2 未 ready（before_request）/ 500 未捕获异常。
     Runtime FAILED 不塌缩：返回 200 + body 带 run_id/status=failed/failed_step/error_message。
+    文件上传限制：最多 10 个，仅 md/txt/xlsx/xls/图片；PDF/Word 暂不支持。
     """
-    data = request.get_json(silent=True)
-    if not data:
-        return jsonify({"error": "请求格式错误，请发送 JSON"}), 400
-    title = (data.get("title") or "").strip()
-    text = (data.get("text") or "").strip()
-    if not title or not text:
-        return jsonify({"error": "title 和 text 不能为空"}), 400
-    source_type = data.get("source_type") or "text"
+    is_multipart = bool(request.content_type and "multipart/form-data" in request.content_type)
+    if is_multipart:
+        title = (request.form.get("title") or "").strip()
+        text = (request.form.get("text") or "").strip()
+        source_type = request.form.get("source_type") or "text"
+        files = [f for f in request.files.getlist("files") if f and f.filename]
+        material_ids_raw = request.form.getlist("material_ids")
+    else:
+        data = request.get_json(silent=True)
+        if not data:
+            return jsonify({"error": "请求格式错误，请发送 JSON"}), 400
+        title = (data.get("title") or "").strip()
+        text = (data.get("text") or "").strip()
+        source_type = data.get("source_type") or "text"
+        files = []
+        material_ids_raw = data.get("material_ids")
 
-    material_ids_raw = data.get("material_ids")
-    material_ids: list[int] | None = None
-    if material_ids_raw is not None:
-        if not isinstance(material_ids_raw, list) or not all(
-            isinstance(x, int) and not isinstance(x, bool) for x in material_ids_raw
-        ):
-            return jsonify({"error": "material_ids 必须是整数数组"}), 400
-        if any(x <= 0 for x in material_ids_raw):
-            return jsonify({"error": "material_ids 必须为正整数"}), 400
-        material_ids = list(dict.fromkeys(material_ids_raw))
-        if len(material_ids) > v2_service.MAX_MATERIALS:
-            return jsonify({"error": f"最多选择 {v2_service.MAX_MATERIALS} 个项目材料"}), 400
+    if not title:
+        return jsonify({"error": "title 不能为空"}), 400
+    if not text and not files:
+        return jsonify({"error": "text 或 files 至少提供一个"}), 400
 
     try:
-        result = v2_service.create_run_and_generate(
-            session["user_id"], session.get("username", ""), title, text, source_type, material_ids=material_ids
-        )
+        material_ids = _parse_material_ids(material_ids_raw, is_form=is_multipart)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+    if files:
+        if len(files) > v2_service.MAX_UPLOAD_FILES:
+            return jsonify({"error": f"最多上传 {v2_service.MAX_UPLOAD_FILES} 个文件"}), 400
+        for file in files:
+            suffix = Path(file.filename or "").suffix.lower()
+            if suffix not in v2_service.ALLOWED_UPLOAD_EXTS:
+                return jsonify({"error": f"不支持的文件类型: {file.filename}（仅支持 md/txt/xlsx/xls/图片）"}), 400
+
+    try:
+        if files:
+            with v2_service.uploaded_paths(files) as paths:
+                upload_source_type = v2_service.derive_source_type(paths, text, source_type)
+                result = v2_service.create_run_and_generate(
+                    session["user_id"],
+                    session.get("username", ""),
+                    title,
+                    text,
+                    upload_source_type,
+                    material_ids=material_ids,
+                    paths=paths,
+                )
+        else:
+            result = v2_service.create_run_and_generate(
+                session["user_id"], session.get("username", ""), title, text, source_type, material_ids=material_ids
+            )
     except Exception as e:  # 未捕获异常 → 500（P0-3）
         logger.exception("V2 POST /runs 执行异常")
         return jsonify({"error": f"V2 生成执行异常: {e}"}), 500

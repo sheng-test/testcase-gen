@@ -40,6 +40,20 @@ export const createRun = (title: string, text: string, sourceType = "text", mate
     jsonInit("POST", { title, text, source_type: sourceType, material_ids: materialIds }),
   );
 
+export async function createRunWithFiles(
+  title: string,
+  text: string,
+  files: File[],
+  materialIds: number[] = [],
+): Promise<PipelineRunResult> {
+  const fd = new FormData();
+  fd.append("title", title);
+  fd.append("text", text);
+  files.forEach((file) => fd.append("files", file));
+  materialIds.forEach((id) => fd.append("material_ids", String(id)));
+  return apiJson<PipelineRunResult>("/api/v2/runs", { method: "POST", body: fd });
+}
+
 export const getRun = (runId: string) =>
   apiJson<{ success: boolean; run: Run }>(`/api/v2/runs/${runId}`).then((d) => d.run);
 

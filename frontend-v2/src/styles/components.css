@@ -149,6 +149,8 @@
 .material-option input { margin-top: 3px; }
 .material-option-title { display: block; }
 .material-option-preview { display: block; color: var(--text-3); font-size: var(--fs-aux); }
+.file-list { display: grid; gap: 6px; margin-top: 8px; }
+.file-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 10px; border: 1px solid var(--line); border-radius: var(--radius-s); font-size: var(--fs-aux); }
 .filter-bar input[type="search"], .filter-bar input[type="text"], .filter-bar select {
   padding: 6px 10px; border: 1px solid var(--line); border-radius: var(--radius-s); font-size: var(--fs-aux); background: var(--surface); color: var(--text-1); font-family: inherit;
 }
