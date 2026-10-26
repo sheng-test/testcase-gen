@@ -95,22 +95,30 @@ function filenameFromDisposition(header: string | null): string | null {
   return plain ? plain[1] : null;
 }
 
-export async function downloadRunExport(runId: string, format: ExportFormat): Promise<void> {
-  const r = await authFetch(`/api/v2/runs/${runId}/export?format=${format}`);
+async function downloadFromApi(url: string, fallbackFilename: string): Promise<void> {
+  const r = await authFetch(url);
   if (!r.ok) {
     const body = (await r.json().catch(() => null)) as { error?: string } | null;
     throw new Error(body?.error || `导出失败 (${r.status})`);
   }
   const blob = await r.blob();
-  const filename = filenameFromDisposition(r.headers.get("Content-Disposition")) || `testcases.${format}`;
-  const url = URL.createObjectURL(blob);
+  const filename = filenameFromDisposition(r.headers.get("Content-Disposition")) || fallbackFilename;
+  const objectUrl = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  a.href = url;
+  a.href = objectUrl;
   a.download = filename;
   document.body.appendChild(a);
   a.click();
   a.remove();
-  URL.revokeObjectURL(url);
+  URL.revokeObjectURL(objectUrl);
+}
+
+export async function downloadRunExport(runId: string, format: ExportFormat): Promise<void> {
+  await downloadFromApi(`/api/v2/runs/${runId}/export?format=${format}`, `testcases.${format}`);
+}
+
+export async function downloadTestPointsXmind(runId: string): Promise<void> {
+  await downloadFromApi(`/api/v2/runs/${runId}/test-points/export`, "test_points.xmind");
 }
 
 // ---- TestCase 人工操作（Step 9）+ 追溯（Step 6）----

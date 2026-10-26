@@ -5,8 +5,8 @@
 
 ★ MVP 限制（P0-4）：同步执行，不实现 Celery / Redis / 消息队列 / 后台 Job。
 ★ 范围（P0-5）：只把已有 core/v2 能力接到 Web，不扩 Runtime、不新增 AI 能力。
-★ 端点（Step 10.3.1 + Step 11 UI 重构 + Step 12.1 导出）：共 15 个 /api/v2/* 端点
-        （1 健康检查 + 1 POST /runs + 9 Run/资产查询/导出 + 4 TestCase 人工/追溯）。
+★ 端点（Step 10.3.1 + Step 11 UI 重构 + Step 12.1 导出 + Step A1 测试点 XMind）：共 16 个 /api/v2/* 端点
+        （1 健康检查 + 1 POST /runs + 10 Run/资产查询/导出 + 4 TestCase 人工/追溯）。
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ from core.reader import IMAGE_EXTS
 from core.schemas import SourceType, TestCaseStatus, new_ulid
 from core.v2 import export as export_lib
 from core.v2 import repository as repo
-from core.v2 import traceability
+from core.v2 import traceability, xmind_export
 from core.v2.client_factory import build_llm_client
 from core.v2.ddl import get_schema_version
 from core.v2.human_editor import edit_test_case as _edit_test_case
@@ -226,16 +226,24 @@ def get_run_detail(run_id: str) -> dict | None:
     return _jsonable(run) if run is not None else None
 
 
-def export_run(session_user_id: int, run_id: str, fmt: str) -> tuple[bytes, str, str] | None:
-    """导出当前用户自己的 Run（默认排除 ARCHIVED）。
-
-    返回 (内容, MIME, 文件名)；Run 不存在或不属于当前用户 → None（上层统一 404，避免泄露他人 Run）。
-    """
+def _get_owned_run(session_user_id: int, run_id: str):
+    """返回当前用户自己的 Run；不存在或不属于当前用户 → None（上层统一 404）。"""
     run = repo.get_run(run_id)
     if run is None:
         return None
     user_row = repo.get_user_by_legacy_id(session_user_id)
     if user_row is None or run.user_id != user_row["id"]:
+        return None
+    return run
+
+
+def export_run(session_user_id: int, run_id: str, fmt: str) -> tuple[bytes, str, str] | None:
+    """导出当前用户自己的 Run（默认排除 ARCHIVED）。
+
+    返回 (内容, MIME, 文件名)；Run 不存在或不属于当前用户 → None（上层统一 404，避免泄露他人 Run）。
+    """
+    run = _get_owned_run(session_user_id, run_id)
+    if run is None:
         return None
 
     fmt = (fmt or "").strip().lower()
@@ -273,6 +281,20 @@ def export_run(session_user_id: int, run_id: str, fmt: str) -> tuple[bytes, str,
         ).encode("utf-8")
 
     return data, mimetype, filename
+
+
+def export_test_points(session_user_id: int, run_id: str) -> tuple[bytes, str, str] | None:
+    """导出当前用户 Run 的测试点为 XMind；Run 不存在或不属于当前用户 → None。"""
+    run = _get_owned_run(session_user_id, run_id)
+    if run is None:
+        return None
+    points = repo.list_test_points_by_run(run_id)
+    doc = repo.get_doc(run.doc_id)
+    title = doc.title if doc is not None and doc.title else "(无标题)"
+    exported_at = datetime.now()
+    data = xmind_export.export_test_points_xmind(points, run_title=title, exported_at=exported_at)
+    filename = export_lib.safe_export_filename(title, ext="xmind", exported_at=exported_at, label="测试点")
+    return data, "application/x-xmind", filename
 
 
 def list_runs(session_user_id: int, limit: int = 50) -> list[dict]:

@@ -251,8 +251,10 @@ def export_test_cases_markdown(
     return "\n".join(lines)
 
 
-def safe_export_filename(run_title: str, *, ext: str, exported_at: datetime | None = None) -> str:
+def safe_export_filename(
+    run_title: str, *, ext: str, exported_at: datetime | None = None, label: str = "测试用例"
+) -> str:
     """生成安全的下载文件名（保留中文，去掉路径/控制字符）。"""
     exported_at = exported_at or datetime.now()
     base = _INVALID_FILENAME_CHARS.sub("_", (run_title or "").strip()).strip(" .") or "testcases"
-    return f"{base[:60]}_测试用例_{exported_at.strftime('%Y%m%d_%H%M%S')}.{ext}"
+    return f"{base[:60]}_{label}_{exported_at.strftime('%Y%m%d_%H%M%S')}.{ext}"

@@ -1,17 +1,42 @@
 // ============================================================
-// 测试点页（Step 3 + Step 4 的呈现）：
-// 顶部摘要回答「AI 生成了什么、规则补了什么、覆盖了多少」，下面才是列表。
+// 测试点页（简洁视图）：按模块/子分类展示，默认隐藏工程统计；
+// 支持导出 XMind，工程细节收进「工程详情」。
 // ============================================================
 
 import { useMemo, useState } from "react";
-import { ProvBadge, Section, StatStrip } from "../components/ui";
+import { downloadTestPointsXmind } from "../api/v2";
+import { useToast } from "../components/Toast";
 import { useRunBundle } from "./RunBundle";
+import type { TestPoint } from "../types";
 
 export function TestPointsTab() {
   const { testPoints, run } = useRunBundle();
-  const [prov, setProv] = useState<string>("");
-  const [mod, setMod] = useState<string>("");
+  const toast = useToast();
   const [q, setQ] = useState("");
+  const [mod, setMod] = useState("");
+  const [exporting, setExporting] = useState(false);
+
+  const modules = useMemo(() => [...new Set(testPoints.map((p) => p.module).filter(Boolean))].sort(), [testPoints]);
+
+  const filtered = testPoints.filter((p) => {
+    if (mod && p.module !== mod) return false;
+    if (q && !`${p.title}${p.description}${p.subcategory}`.toLowerCase().includes(q.toLowerCase())) return false;
+    return true;
+  });
+
+  const grouped = useMemo(() => {
+    const byModule = new Map<string, Map<string, TestPoint[]>>();
+    filtered.forEach((p) => {
+      const module = p.module || "未分类";
+      const subcategory = p.subcategory || "未分类";
+      const subMap = byModule.get(module) || new Map<string, TestPoint[]>();
+      const points = subMap.get(subcategory) || [];
+      points.push(p);
+      subMap.set(subcategory, points);
+      byModule.set(module, subMap);
+    });
+    return [...byModule.entries()];
+  }, [filtered]);
 
   const stats = useMemo(() => {
     const llm = testPoints.filter((p) => (p.provenance || "").toUpperCase() === "LLM").length;
@@ -21,90 +46,92 @@ export function TestPointsTab() {
       const s = p.generation_scope || "item";
       scope.set(s, (scope.get(s) || 0) + 1);
     });
-    const dims = new Map<string, number>();
-    testPoints.forEach((p) => dims.set(p.dimension || "-", (dims.get(p.dimension || "-") || 0) + 1));
-    return { llm, strategy, scope, dims };
+    return { llm, strategy, scope };
   }, [testPoints]);
 
-  const modules = useMemo(() => [...new Set(testPoints.map((p) => p.module))].sort(), [testPoints]);
-
-  const filtered = testPoints.filter((p) => {
-    if (prov && (p.provenance || "").toUpperCase() !== prov) return false;
-    if (mod && p.module !== mod) return false;
-    if (q && !`${p.title}${p.description}${p.subcategory}`.toLowerCase().includes(q.toLowerCase())) return false;
-    return true;
-  });
+  const doExport = async () => {
+    setExporting(true);
+    try {
+      await downloadTestPointsXmind(run.id);
+      toast("测试点已导出 XMind");
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "导出失败", "error");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   return (
     <div>
-      <Section title="AI 与规则的分工" hint="LLM 语义设计 + 策略引擎确定性补充">
-        <StatStrip
-          items={[
-            { label: "LLM 语义设计（Step 3）", value: stats.llm, sub: `单需求项 ${stats.scope.get("item") ?? 0} · 跨项 ${stats.scope.get("cross_item") ?? 0}`, tone: "hl" },
-            { label: "Strategy 确定性补充（Step 4）", value: stats.strategy, sub: "边界/等价类/权限", tone: "ok" },
-            { label: "覆盖义务", value: run.counts?.obligations ?? 0, sub: "策略派生必测项" },
-            { label: "维度分布", value: [...stats.dims.entries()].map(([k, v]) => `${k} ${v}`).join(" · ") || "-" },
-          ]}
+      <div className="quick-toolbar">
+        <span className="quick-title">{testPoints.length} 个测试点</span>
+        <span className="t-aux">覆盖 {modules.length} 个模块</span>
+        <span style={{ flex: 1 }} />
+        <input
+          type="search"
+          placeholder="搜索标题/描述/子分类..."
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
         />
-      </Section>
+        <select value={mod} onChange={(e) => setMod(e.target.value)}>
+          <option value="">全部模块</option>
+          {modules.map((m) => (
+            <option key={m} value={m}>
+              {m}
+            </option>
+          ))}
+        </select>
+        <button className="btn btn-sm btn-primary" onClick={doExport} disabled={exporting || !testPoints.length}>
+          {exporting ? "导出中..." : "导出 XMind"}
+        </button>
+      </div>
 
-      <Section
-        title="测试点列表"
-        actions={
-          <div className="filter-bar" style={{ margin: 0 }}>
-            <input type="search" placeholder="搜索标题/描述/子分类..." value={q} onChange={(e) => setQ(e.target.value)} />
-            <select value={prov} onChange={(e) => setProv(e.target.value)}>
-              <option value="">全部来源</option>
-              <option value="LLM">LLM</option>
-              <option value="STRATEGY">STRATEGY</option>
-            </select>
-            <select value={mod} onChange={(e) => setMod(e.target.value)}>
-              <option value="">全部模块</option>
-              {modules.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
+      {grouped.length ? (
+        grouped.map(([module, subcategories]) => {
+          const count = [...subcategories.values()].reduce((n, points) => n + points.length, 0);
+          return (
+            <div className="quick-card" key={module}>
+              <div className="quick-card-head">
+                <h3>{module}</h3>
+                <span className="meta">{count} 个测试点</span>
+              </div>
+              {[...subcategories.entries()].map(([subcategory, points]) => (
+                <div className="testpoint-group" key={subcategory}>
+                  <h4>{subcategory}</h4>
+                  {points.map((point) => (
+                    <div className="testpoint-item" key={point.id}>
+                      <div className="testpoint-title">
+                        {point.title} <span className="t-aux">{point.priority}</span>
+                      </div>
+                      <div className="testpoint-desc">{point.description}</div>
+                    </div>
+                  ))}
+                </div>
               ))}
-            </select>
-          </div>
-        }
-      >
-        <table className="table">
-          <thead>
-            <tr>
-              <th>模块</th>
-              <th>子分类</th>
-              <th>标题</th>
-              <th>描述</th>
-              <th>维度</th>
-              <th>优先级</th>
-              <th>技术</th>
-              <th>来源</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.slice(0, 300).map((p) => (
-              <tr key={p.id}>
-                <td>{p.module}</td>
-                <td className="col-muted">{p.subcategory || "-"}</td>
-                <td>{p.title}</td>
-                <td className="col-muted" title={p.description}>
-                  {(p.description || "").slice(0, 60)}
-                  {(p.description || "").length > 60 ? "..." : ""}
-                </td>
-                <td>{p.dimension || "-"}</td>
-                <td>{p.priority || "-"}</td>
-                <td className="col-muted">{p.technique || "-"}</td>
-                <td>
-                  <ProvBadge prov={p.provenance} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {filtered.length > 300 ? <div className="t-aux">显示前 300 条（共 {filtered.length} 条，请用筛选缩小范围）。</div> : null}
-        {!filtered.length ? <div className="empty">无匹配测试点。</div> : null}
-      </Section>
+            </div>
+          );
+        })
+      ) : (
+        <div className="empty">无匹配测试点。</div>
+      )}
+
+      <details className="engineering-details">
+        <summary>工程详情（来源 / 生成范围）</summary>
+        <div className="quick-summary" style={{ marginTop: 8 }}>
+          <span>
+            LLM 语义设计 <b>{stats.llm}</b>
+          </span>
+          <span>
+            策略补充 <b>{stats.strategy}</b>
+          </span>
+          <span>
+            逐项 <b>{stats.scope.get("item") ?? 0}</b>
+          </span>
+          <span>
+            跨项 <b>{stats.scope.get("cross_item") ?? 0}</b>
+          </span>
+        </div>
+      </details>
     </div>
   );
 }

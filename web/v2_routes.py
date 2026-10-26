@@ -4,8 +4,8 @@
         业务流程全下沉到 core/v2/runtime.py（Runtime 是 Run 状态唯一控制者）。
 ★ P0-4：POST /runs 同步执行 = MVP 已知限制；10.3 不实现 Celery / Redis / 消息队列 / 后台 Job，异步化留未来。
 ★ P0-5：只接已有 core/v2 能力，不扩 Runtime、不新增 AI 能力；POST /runs 支持 JSON 与 multipart（Step 12.3 文件输入）。
-★ 端点（Step 10.3.1 + Step 11 UI 重构 + Step 12.1 导出）：共 15 个 /api/v2/* 端点 = health + POST /runs + GET /runs（列表）
-        + GET /runs/<id>{,/test-points,/test-cases,/review,/optimizer,/coverage,/requirements,/export}
+★ 端点（Step 10.3.1 + Step 11 UI 重构 + Step 12.1 导出 + Step A1 测试点 XMind）：共 16 个 /api/v2/* 端点 = health + POST /runs + GET /runs（列表）
+        + GET /runs/<id>{,/test-points,/test-points/export,/test-cases,/review,/optimizer,/coverage,/requirements,/export}
         + POST /test-cases/<id>{/edit,/re-review} + GET /test-cases/<id>{/revisions,/trace}。
 """
 
@@ -184,6 +184,17 @@ def v2_list_test_points(run_id):
         return jsonify({"error": f"Run 不存在: {run_id}"}), 404
     provenance = request.args.get("provenance")
     return jsonify({"success": True, "test_points": v2_service.list_test_points(run_id, provenance)})
+
+
+@bp.route("/api/v2/runs/<run_id>/test-points/export", methods=["GET"])
+@login_required
+def v2_export_test_points(run_id):
+    """导出当前用户 Run 的测试点为 XMind（Step A1）。"""
+    result = v2_service.export_test_points(session["user_id"], run_id)
+    if result is None:
+        return jsonify({"error": f"Run 不存在: {run_id}"}), 404
+    data, mimetype, filename = result
+    return send_file(BytesIO(data), mimetype=mimetype, as_attachment=True, download_name=filename)
 
 
 @bp.route("/api/v2/runs/<run_id>/test-cases", methods=["GET"])

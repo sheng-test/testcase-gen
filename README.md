@@ -26,6 +26,8 @@
 | **V2 用例导出** | 运行详情可直接导出 Excel / Markdown，默认排除已归档用例；导出内容含步骤、预期、测试数据、状态与来源 |
 | **V2 材料引用** | 新建运行时可选择项目材料作为背景上下文（最多 5 个，当前仅引用文本），材料不单独成为需求项 |
 | **V2 文件输入** | 支持上传 md/txt/xlsx/xls 与图片（最多 10 个），与手写需求文本可混合；PDF/Word 暂不支持 |
+| **V2 测试点导出 XMind** | 运行详情 → 测试点 → 导出 XMind，结构为 需求 → 模块 → 子分类 → 测试点 |
+| **V2 简洁视图** | 默认只看 需求 / 测试点 / 测试用例；IR、优化、报告等工程细节收进「高级」入口 |
 | **正式 baseline-v0.1** | 10/10 case 全量真实跑通并封存（模型 `deepseek-v4.1-flash` / 阿里云百炼），机器可读基线入库 |
 | **S8 Compare / Delta** | 任一新 runset 与 baseline 做逐格 delta（improvement / regression / unchanged），跨模型/跨数据集自动判不可比，无 CI 门禁 |
 
@@ -125,7 +127,7 @@ testcase-gen/
 │   │                     #   compare（S8 只读 Compare/Delta）
 ├── web/                  # Web 路由
 │   ├── data.py generate.py auth.py      # [V1] API
-│   └── v2_service.py v2_routes.py       # [V2] 15 个 /api/v2/* 端点（复用 V1 鉴权）
+│   └── v2_service.py v2_routes.py       # [V2] 16 个 /api/v2/* 端点（复用 V1 鉴权）
 ├── static/               # [V1] 原生前端；static/v2/ 为 V2 构建产物
 ├── frontend-v2/          # [V2] React + TS + Vite 源码（Run-centric IA）
 ├── templates/v2.html     # [V2] SPA 壳
@@ -136,7 +138,7 @@ testcase-gen/
 │   ├── runsets/          # Runner 快照（gitignore，本地验收产物）
 │   └── compares/         # S8 比较报告（gitignore，派生产物）
 ├── docs/v2/              # V2 蓝图/进度（PROGRESS.md 为单一真相源）+ 各 Step 设计
-├── tests/                # pytest 测试（1444 passed + 13 skipped）
+├── tests/                # pytest 测试（1450 passed + 13 skipped）
 ├── data/data.db          # [V1] 数据库
 ├── data/data_v2.db       # [V2] 独立数据库（schema_version=10）
 ├── config.yaml           # 配置（不追踪 git）
@@ -169,7 +171,7 @@ testcase-gen/
 ## 🧪 测试与代码规范
 
 ```bash
-pytest                              # 全部测试（1444 passed + 13 skipped；含 V1 原有 126 例零回归）
+pytest                              # 全部测试（1450 passed + 13 skipped；含 V1 原有 126 例零回归）
 pytest tests/test_generator.py -v   # 指定模块
 pytest tests/test_benchmark_compare.py -v   # V2 Step 11 S8 比较层（全离线，零 LLM）
 pytest --cov=. --cov-report=term     # 覆盖率报告

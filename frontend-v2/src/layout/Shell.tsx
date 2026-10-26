@@ -28,7 +28,7 @@ function Nav() {
           <span className="nav-icon">▤</span> 项目材料
         </NavLink>
         <NavLink className="nav-item" to="/resources/xmind">
-          <span className="nav-icon">✎</span> XMind 与迁移
+          <span className="nav-icon">✎</span> XMind 导出
         </NavLink>
       </div>
       <div className="nav-group-label">平台</div>
@@ -51,9 +51,6 @@ export function Shell({ crumbs, children }: { crumbs: ReactNode; children: React
         <Nav />
         <div className="sidebar-footer">
           <div className="who">{username}</div>
-          <a href="/v1" style={{ color: "#94a3b8", fontSize: 11.5 }}>
-            返回 V1
-          </a>
           <button
             style={{ marginLeft: 8 }}
             onClick={async () => {

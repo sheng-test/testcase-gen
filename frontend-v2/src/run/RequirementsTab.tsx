@@ -48,30 +48,47 @@ export function RequirementsTab() {
 
   return (
     <div>
-      <Section title="AI 结构化解析产出" hint={`${req.doc?.title || "-"} · v${req.version?.version_no ?? "-"} · 来源 ${req.doc?.source_type || "-"}`}>
-        <StatStrip
-          items={[
-            { label: "需求项", value: req.item_count, tone: "hl" },
-            { label: "字段规格", value: req.field_count, sub: "驱动策略引擎" },
-            { label: "业务规则", value: req.rule_count },
-            { label: "权限规则", value: req.permission_count },
-            { label: "模块", value: req.modules.length },
-            { label: "低置信项", value: low.length, tone: low.length ? "warn" : "default", sub: low.length ? "建议人工核对" : "全部 high" },
-          ]}
-        />
-        <div className="score-grid" style={{ marginTop: 14, maxWidth: 560 }}>
-          <CoverageBar label="Strategy Obligation 覆盖" value={coverage?.strategy_obligation_coverage} />
-          <CoverageBar label="Requirement Item 覆盖" value={coverage?.requirement_item_coverage} />
+      <Section title="需求概览" hint={`${req.doc?.title || "-"} · v${req.version?.version_no ?? "-"}`}>
+        <div className="quick-summary">
+          <span>
+            需求项 <b>{req.item_count}</b>
+          </span>
+          <span>
+            模块 <b>{req.modules.length}</b>
+          </span>
+          <span>
+            测试点 <b>{testPoints.length}</b>
+          </span>
         </div>
-        {(coverage?.uncovered_item_ids || []).length ? (
-          <div className="alert alert-warn">{coverage!.uncovered_item_ids!.length} 个需求项尚未被任何测试点覆盖（见下方列表「覆盖测试点」列）。</div>
-        ) : null}
-        {low.length ? (
-          <div className="t-aux" style={{ marginTop: 8 }}>
-            低置信需求项：{low.slice(0, 5).map((i) => `${i.module} — ${i.statement.slice(0, 30)}`).join("；")}
-            {low.length > 5 ? ` 等 ${low.length} 项` : ""}
+        <div className="t-aux" style={{ marginTop: 8 }}>
+          点击需求项可查看字段、规则和权限详情；覆盖率与低置信项收在工程详情中。
+        </div>
+        <details className="engineering-details">
+          <summary>工程详情（字段 / 规则 / 权限 / 覆盖率）</summary>
+          <div style={{ marginTop: 12 }}>
+            <StatStrip
+              items={[
+                { label: "字段规格", value: req.field_count, sub: "驱动策略引擎" },
+                { label: "业务规则", value: req.rule_count },
+                { label: "权限规则", value: req.permission_count },
+                { label: "低置信项", value: low.length, tone: low.length ? "warn" : "default" },
+              ]}
+            />
+            <div className="score-grid" style={{ marginTop: 14, maxWidth: 560 }}>
+              <CoverageBar label="Strategy Obligation 覆盖" value={coverage?.strategy_obligation_coverage} />
+              <CoverageBar label="Requirement Item 覆盖" value={coverage?.requirement_item_coverage} />
+            </div>
+            {(coverage?.uncovered_item_ids || []).length ? (
+              <div className="alert alert-warn">{coverage!.uncovered_item_ids!.length} 个需求项尚未被任何测试点覆盖。</div>
+            ) : null}
+            {low.length ? (
+              <div className="t-aux" style={{ marginTop: 8 }}>
+                低置信需求项：{low.slice(0, 5).map((i) => `${i.module} — ${i.statement.slice(0, 30)}`).join("；")}
+                {low.length > 5 ? ` 等 ${low.length} 项` : ""}
+              </div>
+            ) : null}
           </div>
-        ) : null}
+        </details>
       </Section>
 
       {[...byModule.entries()].map(([mod, items]) => (
@@ -82,8 +99,6 @@ export function RequirementsTab() {
                 <th>#</th>
                 <th>类型</th>
                 <th>需求描述</th>
-                <th>字段/规则/权限</th>
-                <th>置信度</th>
                 <th>覆盖测试点</th>
               </tr>
             </thead>
@@ -96,15 +111,11 @@ export function RequirementsTab() {
                       <td className="col-muted">{it.seq}</td>
                       <td>{it.type}</td>
                       <td>{it.statement}</td>
-                      <td className="col-muted">
-                        {(it.fields || []).length} / {(it.rules || []).length} / {(it.permissions || []).length}
-                      </td>
-                      <td>{it.confidence_level || "-"}</td>
                       <td>{tpCountByItem.get(it.id) || 0}</td>
                     </tr>
                     {openRow ? (
                       <tr>
-                        <td colSpan={6} style={{ background: "var(--bg-soft)" }}>
+                        <td colSpan={4} style={{ background: "var(--bg-soft)" }}>
                           <ItemDetail item={it} />
                         </td>
                       </tr>

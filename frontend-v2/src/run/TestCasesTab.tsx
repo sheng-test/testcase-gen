@@ -9,7 +9,7 @@
 // ============================================================
 
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { reReview } from "../api/v2";
 import { useToast } from "../components/Toast";
 import { CaseStatusBadge, ProvBadge } from "../components/ui";
@@ -41,7 +41,7 @@ function railClass(t: TestCase): string {
 }
 
 export function TestCasesTab() {
-  const { testCases, openCase, run, reload } = useRunBundle();
+  const { testCases, openCase, run, reload, review } = useRunBundle();
   const toast = useToast();
   const { exporting, exportRun } = useExportRun(run.id);
   const [params] = useSearchParams();
@@ -89,6 +89,16 @@ export function TestCasesTab() {
 
   return (
     <div>
+      {review ? (
+        <div className="quick-review">
+          <span>
+            <b>AI 评审</b> Overall {review.overall_score ?? "-"}
+          </span>
+          <span>findings {review.findings?.length ?? 0} 条 · 第 {review.revision} 轮</span>
+          <span style={{ flex: 1 }} />
+          <Link to={`/runs/${run.id}/review`}>查看完整评审 →</Link>
+        </div>
+      ) : null}
       <div className="filter-bar">
         {CHIPS.map((s) => {
           const n = s.key === "pending" ? pendingTotal : s.key === "" ? testCases.length : counts.get(s.key) || 0;

@@ -37,7 +37,7 @@ V2 的核心不是 `Prompt→LLM→Result`，而是 **"结构化数据 → 规�
 - ★**正式 baseline-v0.1 已成立（2026-09-23，attempt #3）**：模型按 D5 第三次修订钉为 `deepseek-v4.1-flash`（provider 仍为阿里云百炼，同端点同密钥），runset **`bm-bench-v0-1-20260923T055019Z`** = **10/10 completed / llm_failure 0 / evaluation_failure 0 / input_invalid 0 / EXIT_CODE=0 / retries 0 / failures 0**，`git_commit=731e013`、`git_dirty=false`、`case_set_digest=d9b5bb552b1833d9debd0e1d75fa6f31`，全轮 1254 次真实 LLM 调用 / 5862 s，**未与 attempt #2 的任何 case 拼接**。完整封存记录见 §11.4.1。attempt #1/#2 仍只作架构验证证据、不作 baseline。
 - **S8 Compare / Delta** ✅（2026-09-23 实施，见 §11.8 + 设计文档附录 D）：`core/v2/eval/compare.py` + 独立 CLI `scripts/v2_benchmark_compare.py` + **机器可读正式基线 `benchmark/baselines/baseline-v0.1.json`**（补齐 B.2#7「baseline 显式提升入库」欠账）+ 59 例离线测试。零真实 LLM、零 DB 写入、无阈值无门禁（regression 不影响退出码，码表刻意不含 1）；跨模型/跨数据集一律 `not_comparable` 而非静默混算；identity 全格 `diagnostic_only=true`。全量 **1378 passed + 3 skipped**（= 基线 1319 + S8 新增 59），ruff 双绿，schema_version=10，三个 DB 哈希未变，Gold/bench-v0.1/Runtime/S6 CLI/评测口径 **0 行改动**。
 - Step 11 收口时全量测试基线 = **1378 passed + 3 skipped**。S8 已提交推送（`b09a388`，origin=gitee=local 三方同步）⇒ **Step 11 全链（S1~S8 + baseline）收口**。
-- **2026-10-26 状态更新**：A2 断点续跑已实施（`e3c7e53`，`--resume` + 来源一致性硬门禁 + `test_benchmark_runner.py` 82 例通过）；部署/公共实例/路由调整已推送（`7b4e0e0`~`1c20c24`，登录后 `/` 默认进 V2，V1 移至 `/v1`）。当前全量基线 **1444 passed + 13 skipped**（10 个 benchmark smoke 库缺失跳过 + 3 个 real_llm 跳过）。**Step 12 = V2 交付闭环已完成**：12.0 文档对齐 / 12.1 Excel-Markdown 导出 / 12.2 项目材料引用 / 12.3 文件输入全部完成（详见 §12）。
+- **2026-10-26 状态更新**：A2 断点续跑已实施（`e3c7e53`，`--resume` + 来源一致性硬门禁 + `test_benchmark_runner.py` 82 例通过）；部署/公共实例/路由调整已推送（`7b4e0e0`~`1c20c24`，登录后 `/` 默认进 V2，V1 移至 `/v1`）。当前全量基线 **1450 passed + 13 skipped**（10 个 benchmark smoke 库缺失跳过 + 3 个 real_llm 跳过）。**Step 12 = V2 交付闭环已完成**：12.0 文档对齐 / 12.1 Excel-Markdown 导出 / 12.2 项目材料引用 / 12.3 文件输入全部完成（详见 §12）。**12.4 自用精简版阶段 A 已完成**：测试点 XMind 导出 + 三视图简化；阶段 B（测试点编辑 + 分阶段生成）待做，见 §12.4。
 
 **★ Step 9 后真实项目状态审计结论（Step 10 的由来）**：V2 后端代码完整但**完全未产品化**——`data/data_v2.db` 是空库（Tables: []，从未运行 create_v2_schema）、`web/` 目录 0 处引用 `core.v2`（前端纯 V1）、无 CLI 入口、无顶层 Runtime 串联 Step 2→8、V2 LLM 从未真实调用（875 tests 全 mock/临时 DB）。因此 Step 10 不新增 AI 功能，专注把已有能力变成用户可真实运行的产品链路。
 
@@ -126,9 +126,10 @@ LLM 的输入/输出两端都必须是已定义 Schema 的结构化数据；LLM 
 | 11 Quality Eval + Benchmark（S1~S8） | ✅ **S1~S7 ✅ + D14 ✅ + F1·F2 ✅ + 架构观测性（A1·A3·A7·A8）✅ + ★baseline-v0.1 ✅ 正式成立（10/10 completed）+ S8 Compare/Delta ✅（无门禁；待用户验收提交）** | S1 `docs/v2/step11-benchmark-evaluation.md`（冻结 v1.0）；S2 `core/v2/eval/schema.py`（Case/Gold/Manifest+loader）；S3 `core/v2/eval/`{matching,metrics_hard}.py（四态匹配+硬指标+RunObservation 契约，零 LLM）；S4 `benchmark/`（bench-v0.1：10 case+10 requirement+11 gold+manifest）+ 4 测试文件 147 例；S5 `core/v2/eval/`{metrics_soft,semantic_prompts}.py（语义三态+forbidden suspect+candidate 预审+JSON 契约）+ 34 例；S6 `core/v2/eval/runner_lib.py`+`scripts/v2_benchmark.py`（独立 CLI 进程+独立 benchmark DB+五态阶段门控分类+环境指纹+runset 快照+生产库硬护栏）+ 58 例；S7 `core/v2/eval/`{rails,textops}.py（三轨关联 identity 诊断>bridge>anchor + D10 不猜 item_id）+ `metrics_hard.py`/`runner_lib.py` 接入 + bc_01 Gold `gold-v0.2` + D7② `core/config.py` 空配置守卫 + D6 `config.yaml` 模型同步 + 48 例 + 设计文档附录 C；★**baseline-v0.1** runset `bm-bench-v0-1-20260923T055019Z`（模型 `deepseek-v4.1-flash`，10/10 completed，1254 次真实调用，完整封存见 §11.4.1）；S8 `core/v2/eval/compare.py`+`scripts/v2_benchmark_compare.py`+`benchmark/baselines/baseline-v0.1.json`（只读比较层：可比性判据 + None-safe delta + 无门禁报告，见 §11.8）；详见 §11 | S1~S4 已推 (`0cb4bf5`)；S5 已推 (`7b59bfe`)；S6 已推 (`f72db13`)；S7 已推 (`2eda2e2`)；baseline 封存已推 (`12728ea`)；S8 已推 (`b09a388`)，origin=gitee=local 三方同步 |
 | ├ S7 后续修正（D14 / F1·F2 / 架构观测性） | ✅ 完成+已推送（origin=gitee=local=`9f7888c`） | **D14** `rails.py` 多 Gold N≠M 不猜归因（守卫触发 0 次、bc_01 数字零变化）；**F1** `parser.extract_json` 多围栏容错 + **F2** `ir.py` 解析问题 warning；**观测性** A1 `LLMClient` 用量计数 + Runtime 阶段增量对账（`PipelineStepResult.llm_attempts/retries/failures`）、A3 `metrics_soft.BatchMeta.failure_kind/evidence`（禁落原文，只 sha256_12+长度+形状+计数）、A7 `runner_lib` `signals.evidence_counts`/`rules_without_evidence`、A8 `parser.classify_parse_issue()` 封闭归类（schema 严格性未放宽）+ `tests/test_llm_usage_stats.py`(20) + runtime/S5 离线用例(+3+7)；详见 §11.5 | D14 `1d55415`；F1+F2 `74cf9db`；观测性 `9f7888c`（均已推双远程） |
 | 12 V2 交付闭环 | ✅ 完成（12.0 文档对齐 / 12.1 导出 / 12.2 材料引用 / 12.3 文件输入 全部 ✅） | `core/v2/export.py` + `GET /api/v2/runs/<id>/export`（15 个 V2 端点）+ 前端导出入口 + `POST /runs` 的 `material_ids` 与 JSON/multipart 文件输入；详见 §12 | 12.1 `f5b827e`；12.2 `9fa33c0`；12.3 随本次提交收口 |
+| 12.4 自用精简版 | 🟡 阶段 A ✅（XMind 导出 + 三视图）；阶段 B ⬜（测试点编辑 + 分阶段生成） | `core/v2/xmind_export.py` + `GET /runs/<id>/test-points/export`；运行页三视图 + 高级入口；详见 §12.4 | 阶段 A 待提交 |
 | 13 Preference Learning | ⬜ 未开始（前置：真实人工编辑数据积累 + 路线评审） | 数据源 = Step 9 `changed_fields`；V1 已有偏好提取，V2 未接线 | — |
 
-**测试基线**：V1 原有 126 例（零回归）+ V2 新增。**2026-10-26 实测：1444 passed + 13 skipped**（Step 12.1 导出 9 例 + Step 12.2 材料引用 12 例 + Step 12.3 文件上传 13 例；13 skip = 10 个 benchmark smoke 库缺失 + 3 个 real_llm）。以下为 Step 11 收口时的历史计数：**1378 passed + 3 skipped**（Step 11 S2~S7 新增 292 例 Benchmark/Eval 测试，其中 S5 语义层 34、S6 Runner 58、S7 三轨 48；S7 后续再新增 D14+F1·F2 共 13 例（`test_benchmark_rails` D14 归因 + `test_ir_parser`/`test_ir_build` 围栏与解析日志）+ 观测性 30 例（`test_llm_usage_stats` 20 / `test_v2_runtime` 阶段用量 3 / `test_benchmark_metrics_soft` 批次失败证据 7）；**S8 再新增 59 例 `test_benchmark_compare`（可比性/delta 语义/方向口径/脱敏投影/聚合分母/报告往返/runset 完整性/CLI 码表/零 LLM 零 DB）**；另 S7 的 D7② 在 `tests/test_regression.py` 新增 5 例 V1 配置守卫；启用 V2_RUN_REAL_LLM=1 后 +3），schema_version=10，ruff check/format 全绿。
+**测试基线**：V1 原有 126 例（零回归）+ V2 新增。**2026-10-26 实测：1450 passed + 13 skipped**（Step 12.1 导出 9 例 + Step 12.2 材料引用 12 例 + Step 12.3 文件上传 13 例 + Stage A XMind 导出 6 例；13 skip = 10 个 benchmark smoke 库缺失 + 3 个 real_llm）。以下为 Step 11 收口时的历史计数：**1378 passed + 3 skipped**（Step 11 S2~S7 新增 292 例 Benchmark/Eval 测试，其中 S5 语义层 34、S6 Runner 58、S7 三轨 48；S7 后续再新增 D14+F1·F2 共 13 例（`test_benchmark_rails` D14 归因 + `test_ir_parser`/`test_ir_build` 围栏与解析日志）+ 观测性 30 例（`test_llm_usage_stats` 20 / `test_v2_runtime` 阶段用量 3 / `test_benchmark_metrics_soft` 批次失败证据 7）；**S8 再新增 59 例 `test_benchmark_compare`（可比性/delta 语义/方向口径/脱敏投影/聚合分母/报告往返/runset 完整性/CLI 码表/零 LLM 零 DB）**；另 S7 的 D7② 在 `tests/test_regression.py` 新增 5 例 V1 配置守卫；启用 V2_RUN_REAL_LLM=1 后 +3），schema_version=10，ruff check/format 全绿。
 
 ---
 
@@ -560,6 +561,7 @@ core/v2/         # V2 持久层 + 领域服务（独立 data_v2.db，schema_vers
   optimizer.py optimizer_orchestrator.py                                 # Step 8 Dedup Optimizer（去重归档 + 有条件重评审）
   human_editor.py human_editor_orchestrator.py                           # Step 9 Human Editor（人工编辑 + Revision 快照 + 乐观锁 + Validator）
   export.py      # Step 12.1 V2 用例导出（Excel 两 sheet / Markdown；默认排除 ARCHIVED）
+  xmind_export.py # 12.4 测试点 XMind 导出（模块 → 子分类 → 测试点）
   bootstrap.py   # Step 10.1 V2 DB 真初始化（ensure_v2_ready，web 启动路径调用）
   runtime.py client_factory.py                                           # Step 10.2 顶层 Runtime（run_v2_pipeline）+ LLMClient 构建工厂；A1 阶段级 LLM 用量增量对账（llm_attempts/retries/failures）+ IR 解析问题计数
   eval/        # Step 11 Benchmark 评价层（Runtime 外部只读观测，零 DB 写入）
@@ -571,7 +573,7 @@ core/v2/         # V2 持久层 + 领域服务（独立 data_v2.db，schema_vers
     textops.py #    S7（裁决 D8）：`anchor_satisfied` / `statement_similarity` 两个通用文本 helper（非 NLP 层，配防漂移测试）
     rails.py   #    S7（裁决 D1/D2/D3/D9/D10）：三轨关联唯一入口 identity(诊断)>bridge>anchor + RailMatch.via + IdentityDiagnostics + D10 不猜 item_id；D14：多 Gold 场景 N≠M 归入 unattributable
     compare.py #    S8：Compare/Delta 只读比较层（脱敏投影 digest + 聚合 + 可比性 15 判据 + None-safe 无阈值 diff + 报告契约）；零 LLM、零 DB、不改任何判定口径
-web/             # Web 层：__init__.py（V1 蓝图 + /v2 页面路由 Step 10.4）+ v2_service.py（HTTP↔core/v2 适配 Step 10.3 + Step 12.2 材料注入 + Step 12.3 临时文件）+ v2_routes.py（15 个 /api/v2/* 端点，含只读 requirements、Step 12.1 导出、Step 12.2 material_ids、Step 12.3 JSON/multipart）
+web/             # Web 层：__init__.py（V1 蓝图 + /v2 页面路由 Step 10.4）+ v2_service.py（HTTP↔core/v2 适配 Step 10.3 + Step 12.2 材料注入 + Step 12.3 临时文件）+ v2_routes.py（16 个 /api/v2/* 端点，含只读 requirements、Step 12.1 导出、Step 12.2 material_ids、Step 12.3 JSON/multipart、12.4 测试点 XMind）
 scripts/         # CLI：v2_real_run.py（Step 10.5 真实 LLM 全链路，权威验证路径）+ v2_step10_verify.py（Step 10.6 一键验收 + 22 条门槛报告表）+ v2_benchmark.py（Step 11 S6 Benchmark Runner，独立进程 + 独立 benchmark DB + runset 快照）+ v2_benchmark_compare.py（Step 11 S8 只读比较器：baseline↔runset delta + baseline 提升，零 LLM/零 DB/无门禁）
 benchmark/       # Step 11 S4 bench-v0.1 数据集（cases/ 10 正式+demo 的 json+requirement.md；gold/ 11；manifests/ bm-bench-v0-1 十 case + bm-demo[bench-v0.0-demo 隔离]）；baselines/（S8 机器可读正式基线 baseline-v0.1.json，入库）；runsets/（S6 输出，已 gitignore 不入库）；compares/（S8 报告，派生产物，已 gitignore）
 templates/v2.html（React SPA 壳）+ frontend-v2/（V2 前端源码 React+TS+Vite）+ static/v2/（构建产物 v2_react.js/v2_react.css，入库）  # UI 重构后形态；V1 三件套零改动
@@ -590,6 +592,7 @@ tests/           # test_schemas/state_machine/v2_repository/v2_roundtrip/resolve
                  # test_v2_export（Step 12.1：Excel/Markdown 内容、归档过滤、越权、格式/空运行）
                  # test_v2_materials（Step 12.2：材料注入、用户隔离、去重/数量/类型校验）
                  # test_v2_uploads（Step 12.3：multipart、临时文件清理、格式/数量、异常清理）
+                 # test_v2_xmind_export（12.4：XMind 结构、归属、空运行、gating）
                  # test_v2_real_run_script（Step 10.5 CLI smoke）
                  # test_step10_acceptance（Step 10.6：17 门槛 mock）/test_step10_real_llm（门槛 7-9 real_llm marker）
                  # test_benchmark_schema（S2 契约 90）/test_benchmark_eval_s3（S3 引擎 30）
@@ -605,7 +608,7 @@ tests/           # test_schemas/state_machine/v2_repository/v2_roundtrip/resolve
 
 ```powershell
 # venv 已就绪（若无：python -m venv .venv; .\.venv\Scripts\pip install -e ".[dev]"）
-.\.venv\Scripts\python.exe -m pytest -q                    # 期望 1444 passed + 13 skipped（10 smoke 库缺失 + 3 real_llm；V2_RUN_REAL_LLM=1 需本地真实产物）
+.\.venv\Scripts\python.exe -m pytest -q                    # 期望 1450 passed + 13 skipped（10 smoke 库缺失 + 3 real_llm；V2_RUN_REAL_LLM=1 需本地真实产物）
 .\.venv\Scripts\python.exe -m ruff check .                 # 期望 All checks passed
 .\.venv\Scripts\python.exe -m ruff format --check .        # 期望全部 formatted
 .\.venv\Scripts\python.exe scripts/v2_benchmark_compare.py --baseline benchmark/baselines/baseline-v0.1.json --candidate benchmark/runsets/<runset_id>   # S8 比较（只读、无门禁）
@@ -900,7 +903,7 @@ attempt #2 自证信号：`git_commit=74cf9db`、`git_dirty=false`、`case_set_d
 
 ### 11.7 新会话开工确认话术（当前）
 
-> "我已阅读 PROGRESS.md（§0 + §11 + §11.4.1 + §11.8 + §12）。当前：Step 1~11 完成；A2 断点续跑已实施（`e3c7e53`）；Step 12 交付闭环已完成：12.1 导出（Excel/Markdown + 9 例）、12.2 材料引用（material_ids + 12 例）、12.3 文件输入（JSON/multipart + 13 例）。全量 1444 passed + 13 skipped、ruff 双绿、schema_version=10。开放项：A4/A5/A6 短板（A6 已在 baseline 10/10 复现 identity=0）、A8 根因、token 用量插桩（挂账⑩）、D7①、D13/Gold v0.3、凭据轮换；Step 13 偏好学习待真实编辑数据。请给下一步指令。"
+> "我已阅读 PROGRESS.md（§0 + §11 + §11.4.1 + §11.8 + §12）。当前：Step 1~11 完成；A2 断点续跑已实施（`e3c7e53`）；Step 12 交付闭环已完成：12.1 导出（Excel/Markdown + 9 例）、12.2 材料引用（material_ids + 12 例）、12.3 文件输入（JSON/multipart + 13 例）；12.4 阶段 A（XMind + 三视图 + 6 例）。全量 1450 passed + 13 skipped、ruff 双绿、schema_version=10。开放项：A4/A5/A6 短板（A6 已在 baseline 10/10 复现 identity=0）、A8 根因、token 用量插桩（挂账⑩）、D7①、D13/Gold v0.3、凭据轮换；Step 13 偏好学习待真实编辑数据。请给下一步指令。"
 
 ### 11.8 S8 Compare / Delta 实施记录（2026-09-23，只读比较层）
 
@@ -946,7 +949,7 @@ attempt #2 自证信号：`git_commit=74cf9db`、`git_dirty=false`、`case_set_d
 | 路由 | `GET /api/v2/runs/<run_id>/export?format=xlsx\|md`（V2 端点 14→15；login_required + V2_READY gating） |
 | 前端 | `frontend-v2/src/api/v2.ts` 下载封装 + `run/useExportRun.ts` + 测试用例页/报告页导出按钮；构建产物 `static/v2/` 已更新 |
 | 测试 | `tests/test_v2_export.py` 9 例：Excel/MD 内容、ARCHIVED 过滤、格式 400、缺失/他人 Run 404、未登录 401、gating 503、空运行、文件名安全 |
-| 验收 | 12.1 当次全量 1419 passed + 13 skipped；Step 12 完成后最新全量 **1444 passed + 13 skipped**；ruff 双绿；浏览器实测两个导出入口分别产生 `export?format=xlsx` / `format=md` 200，控制台无 error |
+| 验收 | 12.1 当次全量 1419 passed + 13 skipped；12.4 阶段 A 后最新全量 **1450 passed + 13 skipped**；ruff 双绿；浏览器实测两个导出入口分别产生 `export?format=xlsx` / `format=md` 200，控制台无 error |
 
 **默认口径**：导出全部存活用例（不含 ARCHIVED）；Excel 含“测试数据”列与运行信息 sheet；Markdown 按模块分组。
 
@@ -956,7 +959,7 @@ attempt #2 自证信号：`git_commit=74cf9db`、`git_dirty=false`、`case_set_d
 - 注入：材料文本以 `## 项目参考资料（仅作背景上下文，不单独作为需求项）` 拼在需求文本后；Runtime/Schema/DDL/Prompt 零改动。
 - 前端：新建运行页加载 `/api/materials` 多选（最多 5 个，显示预览）；材料页提示更新为“V2 可引用（仅文本）”。
 - 测试：`tests/test_v2_materials.py` 12 例（注入内容、无材料不变、用户隔离、去重、非法类型/数量、text 必填）。
-- 验收：Step 12 完成后全量 **1444 passed + 13 skipped**；ruff 双绿；浏览器 UI 走查通过（不触发真实 LLM）。
+- 验收：12.4 阶段 A 后全量 **1450 passed + 13 skipped**；ruff 双绿；浏览器 UI 走查通过（不触发真实 LLM）。
 - 已知语义边界：材料拼入需求文本后，IR 可能把材料中的规则也抽成需求项；本轮按用户拍板采用最小改动方案，严格分离需改 Prompt 并重算 baseline，留后续评估。
 
 ### 12.3 文件输入 ✅
@@ -966,9 +969,25 @@ attempt #2 自证信号：`git_commit=74cf9db`、`git_dirty=false`、`case_set_d
 - 纯文件上传按扩展名推导 `SourceType`（image / excel / markdown / text）；手写文本或混合文件沿用 fallback。
 - 前端：新建运行页增加「④ 需求文件」，支持多选、移除、数量提示；有文件时走 multipart，无文件保持 JSON。
 - 测试：`tests/test_v2_uploads.py` 13 例（路径内容、临时清理、格式/数量、material_ids 组合、JSON 零回归、异常清理、文件名逃逸防护）。
-- 验收：全量 **1444 passed + 13 skipped**；ruff 双绿；浏览器 UI 走查通过（只选文件，不触发真实 LLM）。
+- 验收：全量 **1450 passed + 13 skipped**；ruff 双绿；浏览器 UI 走查通过（只选文件，不触发真实 LLM）。
 
 ### 已知边界 / 未夹带
 
 - 现有 6 个 V2 GET 查询端点只有登录校验、未校验 Run 归属；本次只在导出端点补 owner 校验，其余未改（单独排期）。
 - 不做异步任务/SSE/配额限流；不做 Step 13 偏好学习；不改 benchmark/Gold/评测口径。
+
+### 12.4 自用精简版（阶段 A ✅ / 阶段 B ⬜）
+
+**目标（用户拍板）**：快速自用，不做 Playwright；V2 内完成测试点生成/修改/导出 XMind、测试用例评审/修改/导出 Excel；页面默认三视图，工程细节收进高级入口。
+
+**阶段 A（✅ 已完成）**
+- 测试点 XMind 导出：`core/v2/xmind_export.py` + `GET /api/v2/runs/<id>/test-points/export`；结构为 需求 → 模块 → 子分类 → 测试点（含描述/优先级/维度）。
+- V2 运行页三视图：需求 / 测试点 / 测试用例；概览、AI 评审详情、去重优化、报告收进「高级」。
+- 需求页默认只显示概览与需求描述，字段/规则/权限/覆盖率折叠；测试点页改为模块卡片，隐藏工程统计；用例页顶部展示 AI 评审 Overall/findings 摘要。
+- 移除 V2 Shell 的「返回 V1」入口；XMind 页改为 V2 导出说明，不再跳转 V1。
+- 测试：`tests/test_v2_xmind_export.py` 6 例；全量 **1450 passed + 13 skipped**；ruff/typecheck/build 通过；浏览器验证 XMind 下载 200、三视图与高级入口正常。
+
+**阶段 B（⬜ 待做）**
+- 测试点编辑：标题/描述/模块/子分类/优先级；保留 fingerprint/id，provenance=HUMAN；生成用例后锁定，需新建运行。
+- 分阶段生成：阶段 1 使用 `stop_after=strategy` 生成测试点（含策略补充）；编辑后通过新入口继续 Step 5→7→8 生成用例/评审/优化。
+- 不改 Schema/DDL/benchmark；不做测试点 AI 评审、不做测试点增删、不做 Playwright。
