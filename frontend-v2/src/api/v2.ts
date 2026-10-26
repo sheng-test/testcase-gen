@@ -34,10 +34,16 @@ export const getHealth = () => apiJson<Health>("/api/v2/health");
 export const listRuns = () =>
   apiJson<{ success: boolean; items: RunListItem[] }>("/api/v2/runs").then((d) => d.items);
 
-export const createRun = (title: string, text: string, sourceType = "text", materialIds: number[] = []) =>
+export const createRun = (
+  title: string,
+  text: string,
+  sourceType = "text",
+  materialIds: number[] = [],
+  stopAfter?: "strategy",
+) =>
   apiJson<PipelineRunResult>(
     "/api/v2/runs",
-    jsonInit("POST", { title, text, source_type: sourceType, material_ids: materialIds }),
+    jsonInit("POST", { title, text, source_type: sourceType, material_ids: materialIds, stop_after: stopAfter }),
   );
 
 export async function createRunWithFiles(
@@ -45,12 +51,14 @@ export async function createRunWithFiles(
   text: string,
   files: File[],
   materialIds: number[] = [],
+  stopAfter?: "strategy",
 ): Promise<PipelineRunResult> {
   const fd = new FormData();
   fd.append("title", title);
   fd.append("text", text);
   files.forEach((file) => fd.append("files", file));
   materialIds.forEach((id) => fd.append("material_ids", String(id)));
+  if (stopAfter) fd.append("stop_after", stopAfter);
   return apiJson<PipelineRunResult>("/api/v2/runs", { method: "POST", body: fd });
 }
 
@@ -140,3 +148,20 @@ export const listRevisions = (tcId: string) =>
 
 export const getTrace = (tcId: string) =>
   apiJson<{ trace: TraceResult }>(`/api/v2/test-cases/${tcId}/trace`).then((d) => d.trace);
+
+export interface TestPointEditUpdates {
+  title?: string;
+  description?: string;
+  module?: string;
+  subcategory?: string;
+  priority?: string;
+}
+
+export const editTestPoint = (tpId: string, updates: TestPointEditUpdates) =>
+  apiJson<{ success: boolean; test_point: TestPoint }>(
+    `/api/v2/test-points/${tpId}/edit`,
+    jsonInit("POST", { updates }),
+  ).then((d) => d.test_point);
+
+export const generateTestCases = (runId: string) =>
+  apiJson<PipelineRunResult>(`/api/v2/runs/${runId}/generate-test-cases`, jsonInit("POST", {}));

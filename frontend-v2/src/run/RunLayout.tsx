@@ -47,7 +47,11 @@ function RunLayoutInner() {
             <h2>
               {title} <RunStatusBadge status={run.status} />
             </h2>
-            <div className="ph-desc">需求 → 测试点 → 测试用例；AI 评审与工程细节在「高级」入口。</div>
+            <div className="ph-desc">
+              {testCases.length
+                ? "需求 → 测试点 → 测试用例；AI 评审与工程细节在「高级」入口。"
+                : "测试点已生成；可修改/导出 XMind 后继续生成测试用例。"}
+            </div>
           </div>
           <div className="ph-actions no-print">
             <button className="btn btn-sm btn-outline" onClick={() => window.print()}>

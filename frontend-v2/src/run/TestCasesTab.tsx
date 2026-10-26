@@ -99,6 +99,12 @@ export function TestCasesTab() {
           <Link to={`/runs/${run.id}/review`}>查看完整评审 →</Link>
         </div>
       ) : null}
+      {!testCases.length ? (
+        <div className="alert alert-info">
+          尚未生成测试用例；请先在「测试点」页确认测试点，再点击「生成测试用例」。
+          <Link to={`/runs/${run.id}/test-points`}> 去测试点 →</Link>
+        </div>
+      ) : null}
       <div className="filter-bar">
         {CHIPS.map((s) => {
           const n = s.key === "pending" ? pendingTotal : s.key === "" ? testCases.length : counts.get(s.key) || 0;

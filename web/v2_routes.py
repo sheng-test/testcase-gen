@@ -4,8 +4,11 @@
         业务流程全下沉到 core/v2/runtime.py（Runtime 是 Run 状态唯一控制者）。
 ★ P0-4：POST /runs 同步执行 = MVP 已知限制；10.3 不实现 Celery / Redis / 消息队列 / 后台 Job，异步化留未来。
 ★ P0-5：只接已有 core/v2 能力，不扩 Runtime、不新增 AI 能力；POST /runs 支持 JSON 与 multipart（Step 12.3 文件输入）。
-★ 端点（Step 10.3.1 + Step 11 UI 重构 + Step 12.1 导出 + Step A1 测试点 XMind）：共 16 个 /api/v2/* 端点 = health + POST /runs + GET /runs（列表）
+★ 端点（Step 10.3.1 + Step 11 UI 重构 + Step 12.1 导出 + 12.4 自用精简）：共 18 个 /api/v2/* 端点 = health + POST /runs
+        + GET /runs（列表）
         + GET /runs/<id>{,/test-points,/test-points/export,/test-cases,/review,/optimizer,/coverage,/requirements,/export}
+        + POST /runs/<id>/generate-test-cases
+        + POST /test-points/<id>/edit
         + POST /test-cases/<id>{/edit,/re-review} + GET /test-cases/<id>{/revisions,/trace}。
 """
 
@@ -101,6 +104,7 @@ def v2_create_run():
         source_type = request.form.get("source_type") or "text"
         files = [f for f in request.files.getlist("files") if f and f.filename]
         material_ids_raw = request.form.getlist("material_ids")
+        stop_after = request.form.get("stop_after") or None
     else:
         data = request.get_json(silent=True)
         if not data:
@@ -110,11 +114,14 @@ def v2_create_run():
         source_type = data.get("source_type") or "text"
         files = []
         material_ids_raw = data.get("material_ids")
+        stop_after = data.get("stop_after") or None
 
     if not title:
         return jsonify({"error": "title 不能为空"}), 400
     if not text and not files:
         return jsonify({"error": "text 或 files 至少提供一个"}), 400
+    if stop_after not in (None, "strategy"):
+        return jsonify({"error": "stop_after 仅支持 strategy（先生成测试点）"}), 400
 
     try:
         material_ids = _parse_material_ids(material_ids_raw, is_form=is_multipart)
@@ -141,10 +148,17 @@ def v2_create_run():
                     upload_source_type,
                     material_ids=material_ids,
                     paths=paths,
+                    stop_after=stop_after,
                 )
         else:
             result = v2_service.create_run_and_generate(
-                session["user_id"], session.get("username", ""), title, text, source_type, material_ids=material_ids
+                session["user_id"],
+                session.get("username", ""),
+                title,
+                text,
+                source_type,
+                material_ids=material_ids,
+                stop_after=stop_after,
             )
     except Exception as e:  # 未捕获异常 → 500（P0-3）
         logger.exception("V2 POST /runs 执行异常")
@@ -261,9 +275,48 @@ def v2_export_run(run_id):
     return send_file(BytesIO(data), mimetype=mimetype, as_attachment=True, download_name=filename)
 
 
+@bp.route("/api/v2/runs/<run_id>/generate-test-cases", methods=["POST"])
+@login_required
+@csrf_protect
+def v2_generate_test_cases(run_id):
+    """阶段 B：基于当前测试点继续生成用例 + 评审 + 去重（同一 Run）。"""
+    try:
+        result = v2_service.generate_cases_for_run(session["user_id"], run_id)
+    except v2_service.CaseGenerationConflict as e:
+        return jsonify({"error": str(e)}), 409
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        logger.exception("V2 继续生成用例异常")
+        return jsonify({"error": f"生成测试用例异常: {e}"}), 500
+    if result is None:
+        return jsonify({"error": f"Run 不存在: {run_id}"}), 404
+    return jsonify(result), 200
+
+
 # ============================================================
 # TestCase 人工操作（Step 9）+ 追溯（Step 6）—— 用户后续主动操作
 # ============================================================
+
+
+@bp.route("/api/v2/test-points/<tp_id>/edit", methods=["POST"])
+@login_required
+@csrf_protect
+def v2_edit_test_point(tp_id):
+    """阶段 B：人工编辑测试点；已生成用例后锁定。"""
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "请求格式错误，请发送 JSON"}), 400
+    updates = data.get("updates") or {}
+    try:
+        result = v2_service.edit_test_point(session["user_id"], tp_id, updates)
+    except v2_service.TestPointLockedError as e:
+        return jsonify({"error": str(e)}), 409
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    if result is None:
+        return jsonify({"error": f"TestPoint 不存在: {tp_id}"}), 404
+    return jsonify({"success": True, "test_point": result})
 
 
 @bp.route("/api/v2/test-cases/<tc_id>/edit", methods=["POST"])

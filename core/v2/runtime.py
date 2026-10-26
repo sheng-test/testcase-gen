@@ -372,3 +372,157 @@ def run_v2_pipeline(
 
     # ================= DONE + counts =================
     return _finish()
+
+
+def continue_v2_pipeline(*, run_id: str, client=None) -> PipelineResult:
+    """在已生成测试点的 Run 上继续 Step 5→7→8（阶段 B：测试点人工修改后再生成用例）。
+
+    前置：Run 存在、已有 TestPoint、尚无 TestCase；调用方负责用户归属/编辑锁校验。
+    """
+    pipeline_t0 = time.perf_counter()
+    steps: list[PipelineStepResult] = []
+    total_llm_calls = 0
+    run = repo.get_run(run_id)
+    if run is None:
+        return PipelineResult(run_id=run_id, success=False, failed_step="testcases", error_message="Run 不存在")
+
+    version_id = run.requirement_version_id
+    if not repo.list_test_points_by_run(run_id):
+        return PipelineResult(
+            run_id=run_id, success=False, failed_step="testcases", error_message="Run 无 TestPoint，无法生成用例"
+        )
+    if repo.list_test_cases(run_id):
+        return PipelineResult(run_id=run_id, success=False, failed_step="testcases", error_message="Run 已存在测试用例")
+
+    gen_client = client or build_llm_client("generate")
+    review_client = gen_client if client is not None else build_llm_client("review")
+
+    def _stats(client_obj) -> dict:
+        stats = getattr(client_obj, "llm_stats", None)
+        if not callable(stats):
+            return {"calls": 0, "attempts": 0, "successes": 0, "failures": 0}
+        return dict(stats())
+
+    def _delta(client_obj, before: dict, reported: int | None = None) -> dict:
+        after = _stats(client_obj)
+        calls = after["calls"] - before["calls"]
+        attempts = after["attempts"] - before["attempts"]
+        return {
+            "llm_calls": calls if reported is None else reported,
+            "llm_attempts": attempts,
+            "llm_retries": max(0, attempts - calls),
+            "llm_failures": after["failures"] - before["failures"],
+        }
+
+    optimizer_result = None
+
+    def _result(success: bool, failed_step: str | None = None, error_message: str | None = None) -> PipelineResult:
+        latest = repo.get_latest_review_report(run_id)
+        return PipelineResult(
+            run_id=run_id,
+            success=success,
+            failed_step=failed_step,
+            error_message=error_message,
+            steps=steps,
+            total_duration_ms=int((time.perf_counter() - pipeline_t0) * 1000),
+            total_llm_calls=total_llm_calls,
+            doc_id=run.doc_id,
+            version_id=version_id,
+            test_point_count=len(repo.list_test_points_by_run(run_id)),
+            test_case_count=len(repo.list_test_cases(run_id)),
+            review_report_id=latest.id if latest else None,
+            optimizer_result=optimizer_result,
+        )
+
+    def _fail(step: str, started: datetime, t0: float, exc: Exception) -> PipelineResult:
+        msg = f"{type(exc).__name__}: {exc}"
+        steps.append(PipelineStepResult(step, False, started, datetime.now(UTC), _ms(t0), error=msg))
+        run.status = RunStatus.FAILED
+        run.failed_step = step
+        run.error_message = msg
+        repo.save_run(run)
+        logger.exception("V2 continue pipeline 失败于 step=%s", step)
+        return _result(False, failed_step=step, error_message=msg)
+
+    # Step 5：TestCases
+    run.status = RunStatus.GENERATING
+    repo.save_run(run)
+    started, t0 = datetime.now(UTC), time.perf_counter()
+    tc_before = _stats(gen_client)
+    try:
+        tc_res = synthesize_test_cases(gen_client, run_id=run_id, version_id=version_id, skip_run_status_update=True)
+    except Exception as exc:
+        return _fail("testcases", started, t0, exc)
+    tc_usage = _delta(gen_client, tc_before, reported=tc_res.llm_calls)
+    total_llm_calls += tc_usage["llm_calls"]
+    steps.append(
+        PipelineStepResult(
+            "testcases",
+            True,
+            started,
+            datetime.now(UTC),
+            _ms(t0),
+            artifact_ids={"run_id": run_id},
+            counts={"cases": len(tc_res.cases), "validated": tc_res.validated_count, "failed": tc_res.failed_count},
+            **tc_usage,
+        )
+    )
+
+    # Step 7：Review
+    run.status = RunStatus.REVIEWING
+    repo.save_run(run)
+    started, t0 = datetime.now(UTC), time.perf_counter()
+    rv_before = _stats(review_client)
+    try:
+        rv_res = review_test_cases(review_client, run_id=run_id, skip_run_status_update=True)
+    except Exception as exc:
+        return _fail("review", started, t0, exc)
+    rv_usage = _delta(review_client, rv_before)
+    total_llm_calls += rv_usage["llm_calls"]
+    steps.append(
+        PipelineStepResult(
+            "review",
+            True,
+            started,
+            datetime.now(UTC),
+            _ms(t0),
+            artifact_ids={"run_id": run_id},
+            counts={"reviewed": rv_res.reviewed_count},
+            **rv_usage,
+        )
+    )
+
+    # Step 8：Optimizer
+    run.status = RunStatus.OPTIMIZING
+    repo.save_run(run)
+    started, t0 = datetime.now(UTC), time.perf_counter()
+    op_before = _stats(gen_client)
+    try:
+        op_res = optimize_duplicates(gen_client, run_id=run_id, skip_run_status_update=True)
+    except Exception as exc:
+        return _fail("optimizer", started, t0, exc)
+    op_usage = _delta(gen_client, op_before)
+    total_llm_calls += op_usage["llm_calls"]
+    optimizer_result = op_res.optimizer_result
+    steps.append(
+        PipelineStepResult(
+            "optimizer",
+            True,
+            started,
+            datetime.now(UTC),
+            _ms(t0),
+            artifact_ids={"run_id": run_id},
+            counts={"archived": optimizer_result.archived_cases if optimizer_result else 0},
+            **op_usage,
+        )
+    )
+
+    run.status = RunStatus.DONE
+    run.counts = RunCounts(
+        items=len(repo.list_items(version_id)),
+        points=len(repo.list_test_points_by_run(run_id)),
+        cases=len(repo.list_test_cases(run_id)),
+        obligations=len(repo.list_obligations(run_id)),
+    )
+    repo.save_run(run)
+    return _result(True)

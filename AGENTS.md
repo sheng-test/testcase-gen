@@ -12,7 +12,7 @@ V2 前端：React + TypeScript + Vite（源码 `frontend-v2/`，构建产物 `st
 ```
 启动:        python start.py [-p 5000] [--debug]          # 登录后默认进 V2（/）；V1 在 /v1
 测试:        pytest [-v] [-k keyword] [tests/test_file.py]
-全量基线:    1450 passed + 13 skipped（10 = benchmark smoke 库缺失；3 = real_llm，默认跳过）
+全量基线:    1462 passed + 13 skipped（10 = benchmark smoke 库缺失；3 = real_llm，默认跳过）
 Lint:        ruff check . && ruff format --check .
 依赖安装:    pip install -e ".[dev]"
 
@@ -62,8 +62,8 @@ traceability.py change_impact.py → Step 6 追溯链 + 变更影响（只读）
 review_prompts.py review_hard.py review_soft.py review_orchestrator.py → Step 7 六维评审（硬/软混合）
 optimizer.py optimizer_orchestrator.py → Step 8 去重归档（canonicalize pairs + 有条件重评审）
 human_editor*.py     → Step 9 人工编辑（白名单 + Revision 快照 + 乐观锁）
-runtime.py client_factory.py bootstrap.py → Step 10 顶层 Runtime（run_v2_pipeline）+ LLM 客户端工厂 + 建库
-web/v2_service.py web/v2_routes.py → 16 个 /api/v2/* 端点（复用 V1 登录态与 CSRF；POST /runs 支持 material_ids + JSON/multipart 文件输入）
+runtime.py client_factory.py bootstrap.py → Step 10 顶层 Runtime（run_v2_pipeline + continue_v2_pipeline）+ LLM 客户端工厂 + 建库
+web/v2_service.py web/v2_routes.py → 18 个 /api/v2/* 端点（复用 V1 登录态与 CSRF；POST /runs 支持 material_ids + JSON/multipart + stop_after=strategy；测试点编辑/继续生成）
 core/v2/export.py    → Step 12.1 Excel/Markdown 导出（默认排除 ARCHIVED）
 core/v2/xmind_export.py → 测试点 XMind 导出（模块→子分类→测试点）
 frontend-v2/ templates/v2.html static/v2/ → V2 React SPA（用例页/报告页可导出）

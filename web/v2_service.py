@@ -5,8 +5,8 @@
 
 ★ MVP 限制（P0-4）：同步执行，不实现 Celery / Redis / 消息队列 / 后台 Job。
 ★ 范围（P0-5）：只把已有 core/v2 能力接到 Web，不扩 Runtime、不新增 AI 能力。
-★ 端点（Step 10.3.1 + Step 11 UI 重构 + Step 12.1 导出 + Step A1 测试点 XMind）：共 16 个 /api/v2/* 端点
-        （1 健康检查 + 1 POST /runs + 10 Run/资产查询/导出 + 4 TestCase 人工/追溯）。
+★ 端点（Step 10.3.1 + Step 11 UI 重构 + Step 12.1 导出 + 12.4 自用精简）：共 18 个 /api/v2/* 端点
+        （1 健康检查 + 1 POST /runs + 11 Run/资产查询/导出/继续生成 + 5 TestPoint/TestCase 人工/追溯）。
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import fields, is_dataclass
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from enum import Enum
 from pathlib import Path
 
@@ -25,7 +25,7 @@ from pydantic import BaseModel
 
 from core import db as v1_db
 from core.reader import IMAGE_EXTS
-from core.schemas import SourceType, TestCaseStatus, new_ulid
+from core.schemas import Priority, Provenance, SourceType, TestCaseStatus, new_ulid
 from core.v2 import export as export_lib
 from core.v2 import repository as repo
 from core.v2 import traceability, xmind_export
@@ -34,13 +34,22 @@ from core.v2.ddl import get_schema_version
 from core.v2.human_editor import edit_test_case as _edit_test_case
 from core.v2.human_editor_orchestrator import re_review_test_cases as _re_review_cases
 from core.v2.ingestion import EXCEL_EXTS
-from core.v2.runtime import run_v2_pipeline
+from core.v2.runtime import continue_v2_pipeline, run_v2_pipeline
 
 logger = logging.getLogger("web.v2_service")
 
 MAX_MATERIALS = 5
 MAX_UPLOAD_FILES = 10
 ALLOWED_UPLOAD_EXTS = {".md", ".txt", *IMAGE_EXTS, *EXCEL_EXTS}
+TEST_POINT_EDITABLE_FIELDS = {"title", "description", "module", "subcategory", "priority"}
+
+
+class TestPointLockedError(ValueError):
+    """测试点已生成用例，禁止继续修改。"""
+
+
+class CaseGenerationConflict(ValueError):
+    """当前 Run 已存在测试用例，不能重复执行继续生成。"""
 
 
 @contextmanager
@@ -184,6 +193,7 @@ def create_run_and_generate(
     source_type: str = "text",
     material_ids: list[int] | None = None,
     paths: list[str] | None = None,
+    stop_after: str | None = None,
 ) -> dict:
     """解析 V2 user → 注入项目材料 → run_v2_pipeline（同步）→ 序列化结果。
 
@@ -199,7 +209,7 @@ def create_run_and_generate(
         st = SourceType.TEXT
     materials = _material_context(session_user_id, material_ids)
     text = _inject_material_context(text, materials)
-    result = run_v2_pipeline(user_id=v2_uid, title=title, text=text, paths=paths, source_type=st)
+    result = run_v2_pipeline(user_id=v2_uid, title=title, text=text, paths=paths, source_type=st, stop_after=stop_after)
     payload = _jsonable(result)
     if result.run_id:
         run = repo.get_run(result.run_id)
@@ -409,6 +419,57 @@ def edit_test_case(tc_id: str, updates: dict, expected_updated_at: str | None = 
     if expected is not None and _iso(tc.updated_at) != expected:
         raise repo.ConcurrentModificationError(f"用例已被更新（当前 updated_at={_iso(tc.updated_at)}），请刷新后重试")
     return _jsonable(_edit_test_case(tc_id, updates, expected_updated_at=expected))
+
+
+def edit_test_point(session_user_id: int, tp_id: str, updates: dict) -> dict | None:
+    """人工修改测试点（阶段 B）；保留 fingerprint/id，已生成用例后锁定。"""
+    point = repo.get_test_point(tp_id)
+    if point is None or point.run_id is None:
+        return None
+    if _get_owned_run(session_user_id, point.run_id) is None:
+        return None
+    if repo.list_test_cases(point.run_id):
+        raise TestPointLockedError("已生成测试用例，测试点已锁定；请新建运行后再修改")
+    if not isinstance(updates, dict) or not updates:
+        raise ValueError("updates 不能为空")
+    unknown = set(updates) - TEST_POINT_EDITABLE_FIELDS
+    if unknown:
+        raise ValueError(f"不支持修改字段: {', '.join(sorted(unknown))}")
+
+    for field in ("title", "description", "module", "subcategory"):
+        if field not in updates:
+            continue
+        value = updates[field]
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"{field} 必须是非空字符串")
+        setattr(point, field, value.strip())
+    if "priority" in updates:
+        try:
+            point.priority = Priority(str(updates["priority"]).strip())
+        except ValueError as exc:
+            raise ValueError("priority 必须为 P0/P1/P2/P3") from exc
+
+    point.provenance = Provenance.HUMAN
+    point.updated_at = datetime.now(UTC)
+    repo.save_test_point(point)
+    return _jsonable(point)
+
+
+def generate_cases_for_run(session_user_id: int, run_id: str) -> dict | None:
+    """在已生成测试点的 Run 上继续 Step 5→7→8（阶段 B）。"""
+    run = _get_owned_run(session_user_id, run_id)
+    if run is None:
+        return None
+    if repo.list_test_cases(run_id):
+        raise CaseGenerationConflict("该运行已生成测试用例，不能重复生成")
+    if not repo.list_test_points_by_run(run_id):
+        raise ValueError("该运行没有测试点，无法生成用例")
+    result = continue_v2_pipeline(run_id=run_id)
+    payload = _jsonable(result)
+    latest = repo.get_run(run_id)
+    if latest is not None:
+        payload["status"] = latest.status.value
+    return payload
 
 
 def re_review(run_id: str, tc_ids: list[str] | None = None) -> dict:

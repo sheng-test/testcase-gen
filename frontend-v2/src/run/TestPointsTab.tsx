@@ -4,17 +4,20 @@
 // ============================================================
 
 import { useMemo, useState } from "react";
-import { downloadTestPointsXmind } from "../api/v2";
+import { downloadTestPointsXmind, editTestPoint, generateTestCases } from "../api/v2";
 import { useToast } from "../components/Toast";
 import { useRunBundle } from "./RunBundle";
 import type { TestPoint } from "../types";
 
 export function TestPointsTab() {
-  const { testPoints, run } = useRunBundle();
+  const { testPoints, testCases, run, reload } = useRunBundle();
   const toast = useToast();
   const [q, setQ] = useState("");
   const [mod, setMod] = useState("");
   const [exporting, setExporting] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [editing, setEditing] = useState<TestPoint | null>(null);
+  const locked = testCases.length > 0;
 
   const modules = useMemo(() => [...new Set(testPoints.map((p) => p.module).filter(Boolean))].sort(), [testPoints]);
 
@@ -61,8 +64,29 @@ export function TestPointsTab() {
     }
   };
 
+  const doGenerateCases = async () => {
+    if (!window.confirm(`将基于当前 ${testPoints.length} 个测试点生成用例并触发 AI 评审，可能需要数十秒，确认继续？`)) return;
+    setGenerating(true);
+    try {
+      const result = await generateTestCases(run.id);
+      if (result.success === false || result.status === "failed") {
+        toast(`生成未完成：${result.error_message || "未知错误"}`, "error");
+      } else {
+        toast(`测试用例已生成：${result.test_case_count ?? "-"} 条`);
+        reload();
+      }
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "生成测试用例失败", "error");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   return (
     <div>
+      {locked ? (
+        <div className="alert alert-info">已生成测试用例，测试点已锁定；如需修改测试点，请新建运行。</div>
+      ) : null}
       <div className="quick-toolbar">
         <span className="quick-title">{testPoints.length} 个测试点</span>
         <span className="t-aux">覆盖 {modules.length} 个模块</span>
@@ -81,7 +105,12 @@ export function TestPointsTab() {
             </option>
           ))}
         </select>
-        <button className="btn btn-sm btn-primary" onClick={doExport} disabled={exporting || !testPoints.length}>
+        {!locked && testPoints.length ? (
+          <button className="btn btn-sm btn-primary" onClick={doGenerateCases} disabled={generating || exporting}>
+            {generating ? "生成中..." : "生成测试用例"}
+          </button>
+        ) : null}
+        <button className="btn btn-sm btn-outline" onClick={doExport} disabled={exporting || !testPoints.length}>
           {exporting ? "导出中..." : "导出 XMind"}
         </button>
       </div>
@@ -100,8 +129,15 @@ export function TestPointsTab() {
                   <h4>{subcategory}</h4>
                   {points.map((point) => (
                     <div className="testpoint-item" key={point.id}>
-                      <div className="testpoint-title">
-                        {point.title} <span className="t-aux">{point.priority}</span>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <div className="testpoint-title" style={{ flex: 1 }}>
+                          {point.title} <span className="t-aux">{point.priority}</span>
+                        </div>
+                        {!locked ? (
+                          <button className="btn btn-sm btn-ghost" onClick={() => setEditing(point)}>
+                            编辑
+                          </button>
+                        ) : null}
                       </div>
                       <div className="testpoint-desc">{point.description}</div>
                     </div>
@@ -132,6 +168,99 @@ export function TestPointsTab() {
           </span>
         </div>
       </details>
+      {editing ? (
+        <TestPointEditModal
+          point={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => {
+            setEditing(null);
+            reload();
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function TestPointEditModal({
+  point,
+  onClose,
+  onSaved,
+}: {
+  point: TestPoint;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const toast = useToast();
+  const [title, setTitle] = useState(point.title);
+  const [description, setDescription] = useState(point.description);
+  const [module, setModule] = useState(point.module);
+  const [subcategory, setSubcategory] = useState(point.subcategory);
+  const [priority, setPriority] = useState(point.priority || "P1");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const save = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      await editTestPoint(point.id, { title, description, module, subcategory, priority });
+      toast("测试点已保存");
+      onSaved();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "保存失败");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal">
+        <div className="modal-head">
+          <h3>编辑测试点</h3>
+          <button className="modal-close" onClick={onClose}>
+            ×
+          </button>
+        </div>
+        <div className="modal-body">
+          <div className="form-group">
+            <label>标题</label>
+            <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label>描述</label>
+            <textarea value={description} onChange={(e) => setDescription(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label>模块</label>
+            <input type="text" value={module} onChange={(e) => setModule(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label>子分类</label>
+            <input type="text" value={subcategory} onChange={(e) => setSubcategory(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label>优先级</label>
+            <select value={priority} onChange={(e) => setPriority(e.target.value)}>
+              {["P0", "P1", "P2", "P3"].map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+          </div>
+          {err ? <div className="alert alert-error">{err}</div> : null}
+        </div>
+        <div className="modal-foot">
+          <button className="btn btn-ghost" onClick={onClose}>
+            取消
+          </button>
+          <button className="btn btn-primary" onClick={save} disabled={busy}>
+            {busy ? "保存中..." : "保存"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

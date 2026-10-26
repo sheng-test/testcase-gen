@@ -21,6 +21,7 @@ export function RunNew() {
   const [materialIds, setMaterialIds] = useState<number[]>([]);
   const [files, setFiles] = useState<File[]>([]);
   const [running, setRunning] = useState(false);
+  const [runningMode, setRunningMode] = useState<"testpoints" | "full" | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [failedRunId, setFailedRunId] = useState<string | null>(null);
   const toast = useToast();
@@ -44,18 +45,20 @@ export function RunNew() {
     setMaterialIds([...materialIds, id]);
   };
 
-  const start = async () => {
+  const start = async (mode: "testpoints" | "full") => {
     if (!title.trim() || (!text.trim() && !files.length)) {
       toast("请填写需求标题，并提供需求文本或至少一个文件", "warn");
       return;
     }
+    const stopAfter = mode === "testpoints" ? "strategy" : undefined;
     setRunning(true);
+    setRunningMode(mode);
     setErr(null);
     setFailedRunId(null);
     try {
       const d = files.length
-        ? await createRunWithFiles(title.trim(), text.trim(), files, materialIds)
-        : await createRun(title.trim(), text.trim(), "text", materialIds);
+        ? await createRunWithFiles(title.trim(), text.trim(), files, materialIds, stopAfter)
+        : await createRun(title.trim(), text.trim(), "text", materialIds, stopAfter);
       if (d.success === false || d.status === "failed") {
         setErr(
           `运行未完成：失败于「${STEP_LABEL[d.failed_step || ""] || d.failed_step || "未知阶段"}」——${d.error_message || "无错误详情"}`,
@@ -64,12 +67,18 @@ export function RunNew() {
         toast("生成未完成，可查看失败详情", "error");
         return;
       }
-      toast(`运行完成：测试点 ${d.test_point_count ?? "-"} · 用例 ${d.test_case_count ?? "-"}`);
-      if (d.run_id) nav(`/runs/${d.run_id}`);
+      if (mode === "testpoints") {
+        toast(`测试点已生成：${d.test_point_count ?? "-"} 个，可修改后继续生成用例`);
+        if (d.run_id) nav(`/runs/${d.run_id}/test-points`);
+      } else {
+        toast(`运行完成：测试点 ${d.test_point_count ?? "-"} · 用例 ${d.test_case_count ?? "-"}`);
+        if (d.run_id) nav(`/runs/${d.run_id}/test-cases`);
+      }
     } catch (e) {
       setErr(e instanceof Error ? e.message : "请求异常");
     } finally {
       setRunning(false);
+      setRunningMode(null);
     }
   };
 
@@ -79,7 +88,7 @@ export function RunNew() {
         <div className="page-header">
           <div className="ph-main">
             <h2>新建测试运行</h2>
-            <div className="ph-desc">输入一份需求，AI 将自动完成：解析需求 → 设计测试点 → 策略补充 → 合成用例 → 评审 → 去重。</div>
+            <div className="ph-desc">先生成测试点，可修改/导出 XMind 后再生成用例；也可以一键跑完整链路。</div>
           </div>
         </div>
 
@@ -180,15 +189,17 @@ export function RunNew() {
               </div>
             ) : null}
             <hr className="divider" />
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <button className="btn btn-primary" onClick={start} disabled={running}>
-                {running ? "全链路执行中..." : "▶ 开始生成"}
+            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+              <button className="btn btn-primary" onClick={() => start("testpoints")} disabled={running}>
+                {running && runningMode === "testpoints" ? "生成测试点中..." : "▶ 生成测试点"}
+              </button>
+              <button className="btn btn-outline" onClick={() => start("full")} disabled={running}>
+                {running && runningMode === "full" ? "全链路执行中..." : "一键生成全部"}
               </button>
               {running ? <span className="spinner" /> : null}
             </div>
             <div className="hint muted small" style={{ marginTop: 10 }}>
-              执行为同步模式（当前 Web MVP 已知限制）：整个链路需要数分钟，请保持页面打开、勿重复点击；若页面被刷新，已完成的运行仍可在运行列表中找回。
-              需要权威长链路验证时请使用 CLI（scripts/v2_real_run.py）。
+              推荐流程：生成测试点 → 修改/导出 XMind → 生成测试用例。同步模式需要数分钟，请保持页面打开；一键生成全部会跳过测试点修改环节。
             </div>
           </div>
         </div>
