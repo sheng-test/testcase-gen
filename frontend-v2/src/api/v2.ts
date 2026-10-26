@@ -34,8 +34,11 @@ export const getHealth = () => apiJson<Health>("/api/v2/health");
 export const listRuns = () =>
   apiJson<{ success: boolean; items: RunListItem[] }>("/api/v2/runs").then((d) => d.items);
 
-export const createRun = (title: string, text: string, sourceType = "text") =>
-  apiJson<PipelineRunResult>("/api/v2/runs", jsonInit("POST", { title, text, source_type: sourceType }));
+export const createRun = (title: string, text: string, sourceType = "text", materialIds: number[] = []) =>
+  apiJson<PipelineRunResult>(
+    "/api/v2/runs",
+    jsonInit("POST", { title, text, source_type: sourceType, material_ids: materialIds }),
+  );
 
 export const getRun = (runId: string) =>
   apiJson<{ success: boolean; run: Run }>(`/api/v2/runs/${runId}`).then((d) => d.run);

@@ -73,9 +73,23 @@ def v2_create_run():
     if not title or not text:
         return jsonify({"error": "title 和 text 不能为空"}), 400
     source_type = data.get("source_type") or "text"
+
+    material_ids_raw = data.get("material_ids")
+    material_ids: list[int] | None = None
+    if material_ids_raw is not None:
+        if not isinstance(material_ids_raw, list) or not all(
+            isinstance(x, int) and not isinstance(x, bool) for x in material_ids_raw
+        ):
+            return jsonify({"error": "material_ids 必须是整数数组"}), 400
+        if any(x <= 0 for x in material_ids_raw):
+            return jsonify({"error": "material_ids 必须为正整数"}), 400
+        material_ids = list(dict.fromkeys(material_ids_raw))
+        if len(material_ids) > v2_service.MAX_MATERIALS:
+            return jsonify({"error": f"最多选择 {v2_service.MAX_MATERIALS} 个项目材料"}), 400
+
     try:
         result = v2_service.create_run_and_generate(
-            session["user_id"], session.get("username", ""), title, text, source_type
+            session["user_id"], session.get("username", ""), title, text, source_type, material_ids=material_ids
         )
     except Exception as e:  # 未捕获异常 → 500（P0-3）
         logger.exception("V2 POST /runs 执行异常")

@@ -11,6 +11,7 @@
    Project / TestTask 实体，不建虚拟 Project 模型，schema_version 保持 10。
 3. 材料/XMind 归位「资源」二级区：项目材料复用 V1 现有 `/api/materials`；
    **V2 生成时引用材料暂未接入**（UI 明确标注，不伪装）；`POST /api/v2/runs` 不加 material_ids。
+   （Step 12.2 已更新：`POST /api/v2/runs` 支持 `material_ids`，仅文本、最多 5 个；本条保留为重构时历史决策）
 4. 唯一后端补充：只读端点 `GET /api/v2/runs/<run_id>/requirements`（13→14 端点）。
 5. 同步 Web Runtime MVP 限制不变：无异步任务 / SSE / 轮询伪进度。
 
@@ -20,7 +21,7 @@
 /v2（React SPA，HashRouter，认证沿用 V1 session + 302 跳回）
 ├── #/                工作台：进行中/最近运行 + 质量概览 + [新建测试运行]
 ├── #/runs            测试运行列表（MVP：本人最近 50 条）
-├── #/runs/new        新建测试运行（同步等待 + 失败定位 + 材料暂未接入标注）
+├── #/runs/new        新建测试运行（同步等待 + 失败定位 + 材料选择；Step 12.2 支持文本材料）
 ├── #/runs/:id        运行详情（二级 Tab，面包屑「测试运行 / <需求> / Tab」）
 │     ├── 概览            Pipeline 阶段步骤条（counts/status 推导，不伪装饰时）+ 指标 + 下一步动作
 │     ├── requirements      需求与 AI 分析（★新端点；FieldSpec/规则/权限展开、低置信、覆盖）
@@ -63,13 +64,13 @@ Runtime、状态机、schema_version=10。
   逐张复查 + PNG 字节扫描确认无 API Key/base_url/凭据（设置页仅显示「已配置」徽标），业务内容仅为合成验收数据。
 - 兼容性：Step 10.5 真实 Run `01M2QBWABYW3VTNYK5BBX2WDN4` 经 `GET /api/v2/runs/<id>` 仍可查询
   （status=done，counts=28 items / 174 points / 174 cases / 25 obligations）。
-- 诚实呈现核查：材料引用「暂未接入」标注、Pipeline 不显示耗时、Optimizer 无 diff 说明、
-  API Key 不回显——均已按后端真实能力呈现。
+- 诚实呈现核查（重构时点）：材料引用「暂未接入」标注（Step 12.2 已接入文本材料）、Pipeline 不显示耗时、
+  Optimizer 无 diff 说明、API Key 不回显——均已按后端真实能力呈现。
 
 ## 5. 已知限制与后续方向（不在本轮实施）
 
 1. 同一次运行编辑用例后其他 Tab 依赖手动刷新/自动 reload（Drawer 保存后 bundle 自动刷新）。
 2. Run 详情一次性并发拉 7 端点，超大用例集（数千）建议分页——当前 300 行截断 + 筛选兜底。
-3. Project / TestTask（任务跨 Run、任务级归档/命名/材料）与 Material→Requirement Context→Runtime
-   引用链路 = 未来独立后端设计（需路线评审）。
+3. Project / TestTask（任务跨 Run、任务级归档/命名/材料）= 未来独立后端设计（需路线评审）；
+   Material→Runtime 引用已在 Step 12.2 以 `material_ids` 最小实现（仅文本、最多 5 个），严格语义分离仍待评估。
 4. 导出 Excel/Markdown 已于 Step 12.1 落地（`GET /api/v2/runs/<id>/export` + 用例页/报告页入口，默认排除 ARCHIVED）；自动化执行仍留 Step 12+，继续保持不伪装原则。

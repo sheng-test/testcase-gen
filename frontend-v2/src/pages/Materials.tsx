@@ -42,7 +42,7 @@ export function Materials() {
         <div className="page-header">
           <div className="ph-main">
             <h2>项目材料</h2>
-            <div className="ph-desc">与 V1 共用的材料库（标题 + 文本 + 图片）。此处管理所有材料；V1 生成流程已支持引用。</div>
+            <div className="ph-desc">与 V1 共用的材料库（标题 + 文本 + 图片）。此处管理所有材料；V1/V2 生成流程均可引用（V2 当前仅引用文本）。</div>
           </div>
           <div className="ph-actions">
             <button className="btn btn-primary" onClick={() => setCreating(true)}>
@@ -51,9 +51,8 @@ export function Materials() {
           </div>
         </div>
 
-        <div className="alert alert-warn">
-          注意：<b>V2 生成时引用项目材料暂未接入</b>（未来将单独设计 Material → Requirement Context → Runtime 后端链路）。
-          当前 V2 测试运行仅使用输入的需求文本。
+        <div className="alert alert-info">
+          新建 V2 测试运行时可选择本项目材料作为背景上下文（最多 5 个；当前仅引用文本内容）。材料不会单独成为需求项。
         </div>
 
         {error ? <ErrorAlert error={error} onRetry={load} /> : null}

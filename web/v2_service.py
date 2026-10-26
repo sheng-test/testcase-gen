@@ -19,6 +19,7 @@ from enum import Enum
 from flask import current_app
 from pydantic import BaseModel
 
+from core import db as v1_db
 from core.schemas import SourceType, TestCaseStatus, new_ulid
 from core.v2 import export as export_lib
 from core.v2 import repository as repo
@@ -30,6 +31,22 @@ from core.v2.human_editor_orchestrator import re_review_test_cases as _re_review
 from core.v2.runtime import run_v2_pipeline
 
 logger = logging.getLogger("web.v2_service")
+
+MAX_MATERIALS = 5
+
+
+def _material_context(session_user_id: int, material_ids: list[int] | None) -> str:
+    """取当前用户选中的项目材料文本；材料只作背景上下文，不改变 Runtime。"""
+    if not material_ids:
+        return ""
+    unique_ids = list(dict.fromkeys(material_ids))[:MAX_MATERIALS]
+    return v1_db.get_materials_for_prompt(session_user_id, unique_ids)
+
+
+def _inject_material_context(text: str, materials: str) -> str:
+    if not materials:
+        return text
+    return f"{text}\n\n## 项目参考资料（仅作背景上下文，不单独作为需求项）\n{materials}"
 
 
 # ============================================================
@@ -120,18 +137,26 @@ def health() -> tuple[dict, int]:
 
 
 def create_run_and_generate(
-    session_user_id: int, username: str, title: str, text: str, source_type: str = "text"
+    session_user_id: int,
+    username: str,
+    title: str,
+    text: str,
+    source_type: str = "text",
+    material_ids: list[int] | None = None,
 ) -> dict:
-    """解析 V2 user → run_v2_pipeline（同步）→ 序列化 PipelineResult + Run 最终 status。
+    """解析 V2 user → 注入项目材料 → run_v2_pipeline（同步）→ 序列化结果。
 
     ★ P0-3：Runtime FAILED 时 payload 保留 run_id / status / failed_step / error_message，
       绝不塌缩成 {"success": false}，让前端能定位挂在哪一步。
+    ★ 材料只取当前用户自己的文本内容，作为背景上下文拼入需求；不改变 Runtime/Schema。
     """
     v2_uid = _resolve_v2_user_id(session_user_id, username)
     try:
         st = SourceType(source_type)
     except ValueError:
         st = SourceType.TEXT
+    materials = _material_context(session_user_id, material_ids)
+    text = _inject_material_context(text, materials)
     result = run_v2_pipeline(user_id=v2_uid, title=title, text=text, source_type=st)
     payload = _jsonable(result)
     if result.run_id:

@@ -24,6 +24,7 @@
 | **V2 Runtime** | 一次调用串起 Step 2→8（`run_v2_pipeline`），Web / CLI 同一条路径 |
 | **V2 质量基准** | bench-v0.1（10 case + 83 条人工独立 Gold）+ 四态 Matching + 三轨关联 + 硬/软双轨评价 + 五态可靠性 + 环境指纹 runset |
 | **V2 用例导出** | 运行详情可直接导出 Excel / Markdown，默认排除已归档用例；导出内容含步骤、预期、测试数据、状态与来源 |
+| **V2 材料引用** | 新建运行时可选择项目材料作为背景上下文（最多 5 个，当前仅引用文本），材料不单独成为需求项 |
 | **正式 baseline-v0.1** | 10/10 case 全量真实跑通并封存（模型 `deepseek-v4.1-flash` / 阿里云百炼），机器可读基线入库 |
 | **S8 Compare / Delta** | 任一新 runset 与 baseline 做逐格 delta（improvement / regression / unchanged），跨模型/跨数据集自动判不可比，无 CI 门禁 |
 
@@ -134,7 +135,7 @@ testcase-gen/
 │   ├── runsets/          # Runner 快照（gitignore，本地验收产物）
 │   └── compares/         # S8 比较报告（gitignore，派生产物）
 ├── docs/v2/              # V2 蓝图/进度（PROGRESS.md 为单一真相源）+ 各 Step 设计
-├── tests/                # pytest 测试（1419 passed + 13 skipped）
+├── tests/                # pytest 测试（1431 passed + 13 skipped）
 ├── data/data.db          # [V1] 数据库
 ├── data/data_v2.db       # [V2] 独立数据库（schema_version=10）
 ├── config.yaml           # 配置（不追踪 git）
@@ -167,7 +168,7 @@ testcase-gen/
 ## 🧪 测试与代码规范
 
 ```bash
-pytest                              # 全部测试（1419 passed + 13 skipped；含 V1 原有 126 例零回归）
+pytest                              # 全部测试（1431 passed + 13 skipped；含 V1 原有 126 例零回归）
 pytest tests/test_generator.py -v   # 指定模块
 pytest tests/test_benchmark_compare.py -v   # V2 Step 11 S8 比较层（全离线，零 LLM）
 pytest --cov=. --cov-report=term     # 覆盖率报告

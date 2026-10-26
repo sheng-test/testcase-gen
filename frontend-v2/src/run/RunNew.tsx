@@ -2,24 +2,46 @@
 // 新建测试运行（阶段 A 入口）。
 // ★ 同步 MVP 诚实呈现：POST /api/v2/runs 同步等待全链路完成（可能数分钟），
 //   无 SSE / 轮询 / 后台 Job（Step 10 冻结限制）；失败不塌缩，展示 failed_step。
-// ★ 项目材料：入口保留但明确标注「V2 生成时引用材料暂未接入」（用户决策，不伪装）。
+// ★ 项目材料：Step 12.2 起可选择材料作为背景上下文（最多 5 个，仅文本）。
 // ============================================================
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { listMaterials } from "../api/v1";
 import { createRun } from "../api/v2";
 import { Shell } from "../layout/Shell";
 import { useToast } from "../components/Toast";
 import { STEP_LABEL } from "../utils";
+import type { MaterialListItem } from "../types";
 
 export function RunNew() {
   const [title, setTitle] = useState("");
   const [text, setText] = useState("");
+  const [materials, setMaterials] = useState<MaterialListItem[] | null>(null);
+  const [materialIds, setMaterialIds] = useState<number[]>([]);
   const [running, setRunning] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [failedRunId, setFailedRunId] = useState<string | null>(null);
   const toast = useToast();
   const nav = useNavigate();
+
+  useEffect(() => {
+    listMaterials()
+      .then(setMaterials)
+      .catch(() => setMaterials([]));
+  }, []);
+
+  const toggleMaterial = (id: number) => {
+    if (materialIds.includes(id)) {
+      setMaterialIds(materialIds.filter((x) => x !== id));
+      return;
+    }
+    if (materialIds.length >= 5) {
+      toast("最多选择 5 个项目材料", "warn");
+      return;
+    }
+    setMaterialIds([...materialIds, id]);
+  };
 
   const start = async () => {
     if (!title.trim() || !text.trim()) {
@@ -30,7 +52,7 @@ export function RunNew() {
     setErr(null);
     setFailedRunId(null);
     try {
-      const d = await createRun(title.trim(), text.trim());
+      const d = await createRun(title.trim(), text.trim(), "text", materialIds);
       if (d.success === false || d.status === "failed") {
         setErr(
           `运行未完成：失败于「${STEP_LABEL[d.failed_step || ""] || d.failed_step || "未知阶段"}」——${d.error_message || "无错误详情"}`,
@@ -75,9 +97,31 @@ export function RunNew() {
               />
             </div>
             <div className="form-group">
-              <label>③ 参考资料</label>
-              <div className="alert alert-warn">
-                项目材料可在「资源 · 项目材料」中管理；<b>V2 生成时引用项目材料暂未接入</b>（当前会把需求文本单独交给 AI，材料引用链路属于后续后端设计）。
+              <label>③ 项目材料（可选，最多 5 个）</label>
+              {materials === null ? (
+                <div className="t-aux">加载中...</div>
+              ) : materials.length ? (
+                <div className="material-picker">
+                  {materials.map((m) => (
+                    <label key={m.id} className="material-option">
+                      <input
+                        type="checkbox"
+                        checked={materialIds.includes(m.id)}
+                        onChange={() => toggleMaterial(m.id)}
+                        disabled={running}
+                      />
+                      <span>
+                        <span className="material-option-title">{m.title}</span>
+                        <span className="material-option-preview">{m.content_preview || "（无文本内容）"}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              ) : (
+                <div className="t-aux">暂无项目材料，可先在「资源 · 项目材料」中创建。</div>
+              )}
+              <div className="hint muted small" style={{ marginTop: 6 }}>
+                已选 {materialIds.length}/5；材料作为背景上下文参与需求解析，当前仅引用文本内容。
               </div>
               <Link className="btn btn-sm btn-ghost" to="/resources/materials">
                 去管理项目材料 →
